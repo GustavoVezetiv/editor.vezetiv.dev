@@ -30,7 +30,14 @@ test('ignora dados de armazenamento corrompidos ou estruturalmente inválidos', 
 test('retorna o resultado de falha ao salvar sem deixar a aplicação lançar erro', () => {
   const savedActivity: SavedActivity = {
     activityId: activity01.id,
-    content: activity01.initialContent,
+    activeDocumentId: 'documento-1',
+    documents: [{
+      id: 'documento-1',
+      name: 'Documento 1',
+      content: activity01.initialContent,
+      preset: 'academic-abnt',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }],
     savedAt: '2026-01-01T00:00:00.000Z',
   }
 
@@ -39,4 +46,17 @@ test('retorna o resultado de falha ao salvar sem deixar a aplicação lançar er
 
   shouldThrowOnWrite = false
   assert.equal(saveActivity(savedActivity), true)
+})
+
+test('migra o autosave anterior para a primeira aba sem perder o conteúdo', () => {
+  values.set(key, JSON.stringify({
+    activityId: activity01.id,
+    content: activity01.initialContent,
+    savedAt: '2026-01-01T00:00:00.000Z',
+  }))
+
+  const restored = loadSavedActivity(activity01)
+  assert.equal(restored?.documents.length, 1)
+  assert.equal(restored?.documents[0].name, 'Documento 1')
+  assert.equal(restored?.documents[0].preset, 'academic-abnt')
 })

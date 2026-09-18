@@ -1,13 +1,15 @@
 import type { Activity } from '../types/activity'
-import type { CheckResult } from '../types/activity'
+import type { CheckResult } from '../verification/verifyActivity'
 import { VerificationPanel } from '../verification/VerificationPanel'
 
 interface ActivityPanelProps {
   activity: Activity
-  results: CheckResult[]
+  results: CheckResult[] | null
+  hasUnverifiedChanges: boolean
+  onVerify: () => void
 }
 
-export function ActivityPanel({ activity, results }: ActivityPanelProps) {
+export function ActivityPanel({ activity, results, hasUnverifiedChanges, onVerify }: ActivityPanelProps) {
   return (
     <aside className="activity-panel" aria-labelledby="activity-title">
       <div className="activity-scroll">
@@ -32,7 +34,12 @@ export function ActivityPanel({ activity, results }: ActivityPanelProps) {
           <p>Leia, entenda, execute, verifique e corrija.</p>
         </section>
       </div>
-      <VerificationPanel results={results} />
+      <VerificationPanel
+        mode={activity.verificationMode}
+        results={results}
+        hasUnverifiedChanges={hasUnverifiedChanges}
+        onVerify={onVerify}
+      />
     </aside>
   )
 }

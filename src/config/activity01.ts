@@ -30,11 +30,12 @@ export const activity01: Activity = {
     'orderedList',
   ],
   pastePolicy: 'blocked',
+  verificationMode: 'manual',
+  defaultDocumentPreset: 'academic-abnt',
   requirements: [
-    'Título principal “Preservação Ambiental”',
-    'Título centralizado',
-    '“sustentabilidade” em negrito',
-    'Lista numerada com pelo menos três itens',
+    { id: 'title', type: 'heading', level: 1, text: 'Preservação Ambiental', label: 'Título principal “Preservação Ambiental”' },
+    { id: 'alignment', type: 'alignment', target: 'Preservação Ambiental', value: 'center', label: 'Título centralizado' },
+    { id: 'bold', type: 'text-mark', text: 'sustentabilidade', mark: 'bold', label: '“sustentabilidade” está em negrito' },
+    { id: 'list', type: 'ordered-list', minItems: 3, label: 'Lista numerada com três itens' },
   ],
-  expectedTitle: 'Preservação Ambiental',
 }

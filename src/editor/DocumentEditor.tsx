@@ -4,17 +4,19 @@ import Underline from '@tiptap/extension-underline'
 import type { JSONContent } from '@tiptap/core'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import type { PastePolicy } from '../types/activity'
+import type { DocumentPreset, EditorTool, PastePolicy } from '../types/activity'
 import { EditorToolbar } from './EditorToolbar'
 
 interface DocumentEditorProps {
   initialContent: JSONContent
   pastePolicy: PastePolicy
+  enabledTools: EditorTool[]
+  preset: DocumentPreset
   onDocumentChange: (content: JSONContent) => void
   onBlockedInput: () => void
 }
 
-export function DocumentEditor({ initialContent, pastePolicy, onDocumentChange, onBlockedInput }: DocumentEditorProps) {
+export function DocumentEditor({ initialContent, pastePolicy, enabledTools, preset, onDocumentChange, onBlockedInput }: DocumentEditorProps) {
   const editor = useEditor({
     shouldRerenderOnTransaction: true,
     extensions: [
@@ -58,13 +60,9 @@ export function DocumentEditor({ initialContent, pastePolicy, onDocumentChange, 
 
   return (
     <section className="document-workspace" aria-label="Área de edição">
-      <EditorToolbar editor={editor} />
+      <EditorToolbar editor={editor} enabledTools={enabledTools} />
       <div className="page-stage">
-        <div className="document-page">
-          <div className="document-page-meta" aria-hidden="true">
-            <span>Documento da atividade</span>
-            <span>Salvamento automático</span>
-          </div>
+        <div className={`document-page document-page--${preset}`}>
           <EditorContent editor={editor} />
         </div>
       </div>
