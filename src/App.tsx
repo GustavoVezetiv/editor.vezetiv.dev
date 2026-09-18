@@ -3,6 +3,7 @@ import type { JSONContent } from '@tiptap/core'
 import { ActivityPanel } from './activity/ActivityPanel'
 import { activity01 } from './config/activity01'
 import { DocumentEditor } from './editor/DocumentEditor'
+import { exportDocument, type ExportFormat } from './export/documentExport'
 import type { CheckResult } from './types/activity'
 import { loadSavedActivity, saveActivity } from './utils/storage'
 import { verifyActivity } from './verification/verifyActivity'
@@ -15,7 +16,9 @@ function App() {
   const [isSaving, setIsSaving] = useState(false)
   const [saveFailed, setSaveFailed] = useState(false)
   const [pasteNotice, setPasteNotice] = useState(false)
-  const [verification, setVerification] = useState<CheckResult[] | null>(null)
+  const [verification, setVerification] = useState<CheckResult[]>(() => verifyActivity(initialContent, activity01))
+  const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null)
+  const [exportError, setExportError] = useState<string | null>(null)
   const documentRef = useRef<JSONContent>(initialContent)
   const saveTimerRef = useRef<number | null>(null)
   const noticeTimerRef = useRef<number | null>(null)
@@ -47,7 +50,7 @@ function App() {
 
   const handleDocumentChange = useCallback((content: JSONContent) => {
     documentRef.current = content
-    setVerification(null)
+    setVerification(verifyActivity(content, activity01))
     setIsSaving(true)
     setSaveFailed(false)
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
@@ -63,8 +66,16 @@ function App() {
     noticeTimerRef.current = window.setTimeout(() => setPasteNotice(false), 4200)
   }, [])
 
-  const handleVerify = useCallback(() => {
-    setVerification(verifyActivity(documentRef.current, activity01))
+  const handleExport = useCallback(async (format: ExportFormat) => {
+    setExportingFormat(format)
+    setExportError(null)
+    try {
+      await exportDocument(documentRef.current, format)
+    } catch {
+      setExportError(`Não foi possível exportar o arquivo ${format.toUpperCase()}.`)
+    } finally {
+      setExportingFormat(null)
+    }
   }, [])
 
   const saveLabel = saveFailed ? 'Não foi possível salvar' : isSaving ? 'Salvando…' : 'Salvo ✓'
@@ -82,11 +93,19 @@ function App() {
           <span>Editor Vezetiv</span>
         </a>
         <div className="header-activity">{activity01.title}</div>
-        <div className={`save-status ${isSaving ? 'saving' : ''} ${saveFailed ? 'failed' : ''}`} title={saveTitle} aria-live="polite">{saveLabel}</div>
+        <div className="header-actions">
+          <button className="export-button" type="button" onClick={() => handleExport('docx')} disabled={exportingFormat !== null}>
+            {exportingFormat === 'docx' ? 'Exportando…' : 'Exportar DOCX'}
+          </button>
+          <button className="export-button" type="button" onClick={() => handleExport('pdf')} disabled={exportingFormat !== null}>
+            {exportingFormat === 'pdf' ? 'Exportando…' : 'Exportar PDF'}
+          </button>
+          <div className={`save-status ${isSaving ? 'saving' : ''} ${saveFailed ? 'failed' : ''}`} title={saveTitle} aria-live="polite">{saveLabel}</div>
+        </div>
       </header>
 
       <div className="workbench">
-        <ActivityPanel activity={activity01} results={verification} onVerify={handleVerify} />
+        <ActivityPanel activity={activity01} results={verification} />
         <div className="editor-column">
           <DocumentEditor
             initialContent={initialContent}
@@ -102,6 +121,7 @@ function App() {
           A colagem está desativada nesta atividade. Digite o conteúdo utilizando o editor.
         </div>
       )}
+      {exportError && <div className="export-notice" role="alert">{exportError}</div>}
     </main>
   )
 }

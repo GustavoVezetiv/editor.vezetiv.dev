@@ -4,11 +4,10 @@ import { VerificationPanel } from '../verification/VerificationPanel'
 
 interface ActivityPanelProps {
   activity: Activity
-  results: CheckResult[] | null
-  onVerify: () => void
+  results: CheckResult[]
 }
 
-export function ActivityPanel({ activity, results, onVerify }: ActivityPanelProps) {
+export function ActivityPanel({ activity, results }: ActivityPanelProps) {
   return (
     <aside className="activity-panel" aria-labelledby="activity-title">
       <div className="activity-scroll">
@@ -33,7 +32,7 @@ export function ActivityPanel({ activity, results, onVerify }: ActivityPanelProp
           <p>Leia, entenda, execute, verifique e corrija.</p>
         </section>
       </div>
-      <VerificationPanel results={results} onVerify={onVerify} />
+      <VerificationPanel results={results} />
     </aside>
   )
 }

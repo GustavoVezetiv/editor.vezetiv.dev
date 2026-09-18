@@ -16,4 +16,4 @@ npm run lint
 npm run build
 ```
 
-O primeiro MVP inclui uma atividade de formatação básica, autosave em `localStorage`, bloqueio configurável de colagem e verificação semântica do documento via Tiptap/ProseMirror.
+O primeiro MVP inclui uma atividade de formatação básica, autosave em `localStorage`, bloqueio configurável de colagem, verificação semântica atualizada automaticamente via Tiptap/ProseMirror e exportação do documento em DOCX ou PDF.
