@@ -1,8 +1,10 @@
 import type { Editor } from '@tiptap/react'
 import type { ButtonHTMLAttributes } from 'react'
+import type { EditorTool } from '../types/activity'
 
 interface EditorToolbarProps {
   editor: Editor | null
+  enabledTools: EditorTool[]
 }
 
 interface ToolbarButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -23,12 +25,21 @@ function ToolbarButton({ active = false, label, className = '', ...props }: Tool
   )
 }
 
-export function EditorToolbar({ editor }: EditorToolbarProps) {
+function Divider() {
+  return <div className="toolbar-divider" />
+}
+
+export function EditorToolbar({ editor, enabledTools }: EditorToolbarProps) {
   if (!editor) return <div className="editor-toolbar" aria-label="Barra de ferramentas" />
 
+  const tools = new Set(enabledTools)
   const currentAlignment = editor.getAttributes('heading').textAlign
     ?? editor.getAttributes('paragraph').textAlign
     ?? 'left'
+  const hasHistory = tools.has('undo') || tools.has('redo')
+  const hasMarks = tools.has('bold') || tools.has('italic') || tools.has('underline')
+  const hasTextControls = tools.has('heading') || tools.has('fontSize')
+  const hasLists = tools.has('bulletList') || tools.has('orderedList')
 
   const setHeading = (level: 1 | 2 | 0) => {
     if (level === 0) {
@@ -40,32 +51,22 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
 
   return (
     <div className="editor-toolbar" aria-label="Barra de ferramentas">
-      <div className="toolbar-group">
-        <ToolbarButton label="Desfazer (Ctrl+Z)" disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()}>
-          ↶
-        </ToolbarButton>
-        <ToolbarButton label="Refazer (Ctrl+Shift+Z)" disabled={!editor.can().redo()} onClick={() => editor.chain().focus().redo().run()}>
-          ↷
-        </ToolbarButton>
-      </div>
+      {hasHistory && <div className="toolbar-group">
+        {tools.has('undo') && <ToolbarButton label="Desfazer (Ctrl+Z)" disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()}>↶</ToolbarButton>}
+        {tools.has('redo') && <ToolbarButton label="Refazer (Ctrl+Shift+Z)" disabled={!editor.can().redo()} onClick={() => editor.chain().focus().redo().run()}>↷</ToolbarButton>}
+      </div>}
 
-      <div className="toolbar-divider" />
+      {hasHistory && hasMarks && <Divider />}
 
-      <div className="toolbar-group">
-        <ToolbarButton label="Negrito (Ctrl+B)" active={editor.isActive('bold')} className="text-bold" onClick={() => editor.chain().focus().toggleBold().run()}>
-          N
-        </ToolbarButton>
-        <ToolbarButton label="Itálico (Ctrl+I)" active={editor.isActive('italic')} className="text-italic" onClick={() => editor.chain().focus().toggleItalic().run()}>
-          I
-        </ToolbarButton>
-        <ToolbarButton label="Sublinhado (Ctrl+U)" active={editor.isActive('underline')} className="text-underline" onClick={() => editor.chain().focus().toggleUnderline().run()}>
-          S
-        </ToolbarButton>
-      </div>
+      {hasMarks && <div className="toolbar-group">
+        {tools.has('bold') && <ToolbarButton label="Negrito (Ctrl+B)" active={editor.isActive('bold')} className="text-bold" onClick={() => editor.chain().focus().toggleBold().run()}>N</ToolbarButton>}
+        {tools.has('italic') && <ToolbarButton label="Itálico (Ctrl+I)" active={editor.isActive('italic')} className="text-italic" onClick={() => editor.chain().focus().toggleItalic().run()}>I</ToolbarButton>}
+        {tools.has('underline') && <ToolbarButton label="Sublinhado (Ctrl+U)" active={editor.isActive('underline')} className="text-underline" onClick={() => editor.chain().focus().toggleUnderline().run()}>S</ToolbarButton>}
+      </div>}
 
-      <div className="toolbar-divider" />
+      {(hasHistory || hasMarks) && hasTextControls && <Divider />}
 
-      <label className="select-control">
+      {tools.has('heading') && <label className="select-control">
         <span className="sr-only">Estilo do texto</span>
         <select
           value={editor.isActive('heading', { level: 1 }) ? 'h1' : editor.isActive('heading', { level: 2 }) ? 'h2' : 'p'}
@@ -76,9 +77,9 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           <option value="h1">Título 1</option>
           <option value="h2">Título 2</option>
         </select>
-      </label>
+      </label>}
 
-      <label className="select-control size-select">
+      {tools.has('fontSize') && <label className="select-control size-select">
         <span className="sr-only">Tamanho da fonte</span>
         <select
           value={editor.getAttributes('textStyle').fontSize ?? ''}
@@ -97,35 +98,23 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           <option value="16pt">16</option>
           <option value="18pt">18</option>
         </select>
-      </label>
+      </label>}
 
-      <div className="toolbar-divider" />
+      {hasTextControls && tools.has('alignment') && <Divider />}
 
-      <div className="toolbar-group alignment-group">
-        <ToolbarButton label="Alinhar à esquerda" active={currentAlignment === 'left'} onClick={() => editor.chain().focus().setTextAlign('left').run()}>
-          ≡
-        </ToolbarButton>
-        <ToolbarButton label="Centralizar" active={currentAlignment === 'center'} className="align-center" onClick={() => editor.chain().focus().setTextAlign('center').run()}>
-          ≡
-        </ToolbarButton>
-        <ToolbarButton label="Alinhar à direita" active={currentAlignment === 'right'} className="align-right" onClick={() => editor.chain().focus().setTextAlign('right').run()}>
-          ≡
-        </ToolbarButton>
-        <ToolbarButton label="Justificar" active={currentAlignment === 'justify'} className="align-justify" onClick={() => editor.chain().focus().setTextAlign('justify').run()}>
-          ≡
-        </ToolbarButton>
-      </div>
+      {tools.has('alignment') && <div className="toolbar-group alignment-group">
+        <ToolbarButton label="Alinhar à esquerda" active={currentAlignment === 'left'} onClick={() => editor.chain().focus().setTextAlign('left').run()}>≡</ToolbarButton>
+        <ToolbarButton label="Centralizar" active={currentAlignment === 'center'} className="align-center" onClick={() => editor.chain().focus().setTextAlign('center').run()}>≡</ToolbarButton>
+        <ToolbarButton label="Alinhar à direita" active={currentAlignment === 'right'} className="align-right" onClick={() => editor.chain().focus().setTextAlign('right').run()}>≡</ToolbarButton>
+        <ToolbarButton label="Justificar" active={currentAlignment === 'justify'} className="align-justify" onClick={() => editor.chain().focus().setTextAlign('justify').run()}>≡</ToolbarButton>
+      </div>}
 
-      <div className="toolbar-divider" />
+      {(hasHistory || hasMarks || hasTextControls || tools.has('alignment')) && hasLists && <Divider />}
 
-      <div className="toolbar-group">
-        <ToolbarButton label="Lista com marcadores" active={editor.isActive('bulletList')} className="list-button" onClick={() => editor.chain().focus().toggleBulletList().run()}>
-          •≡
-        </ToolbarButton>
-        <ToolbarButton label="Lista numerada" active={editor.isActive('orderedList')} className="list-button" onClick={() => editor.chain().focus().toggleOrderedList().run()}>
-          1≡
-        </ToolbarButton>
-      </div>
+      {hasLists && <div className="toolbar-group">
+        {tools.has('bulletList') && <ToolbarButton label="Lista com marcadores" active={editor.isActive('bulletList')} className="list-button" onClick={() => editor.chain().focus().toggleBulletList().run()}>•≡</ToolbarButton>}
+        {tools.has('orderedList') && <ToolbarButton label="Lista numerada" active={editor.isActive('orderedList')} className="list-button" onClick={() => editor.chain().focus().toggleOrderedList().run()}>1≡</ToolbarButton>}
+      </div>}
     </div>
   )
 }

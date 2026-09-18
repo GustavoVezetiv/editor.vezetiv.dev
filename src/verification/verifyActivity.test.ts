@@ -55,6 +55,29 @@ test('exige heading principal correto e centralizado', () => {
   assert.deepEqual(resultsFor(otherHeading), { title: false, alignment: false, bold: false, list: false })
 })
 
+test('aceita espaços e caracteres invisíveis no título correto, mas não outro título', () => {
+  const titleWithFormattingNoise: JSONContent = {
+    type: 'doc',
+    content: [{
+      type: 'heading',
+      attrs: { level: 1, textAlign: 'center' },
+      content: [{ type: 'text', text: '  Preservação\u200B   Ambiental  ' }],
+    }],
+  }
+  const differentTitle: JSONContent = {
+    type: 'doc',
+    content: [{
+      type: 'heading',
+      attrs: { level: 1, textAlign: 'center' },
+      content: [{ type: 'text', text: 'Texto para digitar' }],
+    }],
+  }
+
+  assert.equal(resultsFor(titleWithFormattingNoise).title, true)
+  assert.equal(resultsFor(titleWithFormattingNoise).alignment, true)
+  assert.equal(resultsFor(differentTitle).title, false)
+})
+
 test('exige a palavra inteira em negrito e uma lista numerada com três itens', () => {
   const partiallyBold: JSONContent = {
     type: 'doc',
@@ -80,4 +103,16 @@ test('exige a palavra inteira em negrito e uma lista numerada com três itens', 
   assert.equal(resultsFor(wrongWord).bold, false)
   assert.equal(resultsFor(twoItemList).list, false)
   assert.equal(resultsFor(bulletList).list, false)
+})
+
+test('mantém o requisito de negrito quando outra ocorrência não está em negrito', () => {
+  const multipleOccurrences: JSONContent = {
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [
+      { type: 'text', text: 'A sustentabilidade ', marks: [{ type: 'bold' }] },
+      { type: 'text', text: 'precisa de sustentabilidade diária.' },
+    ] }],
+  }
+
+  assert.equal(resultsFor(multipleOccurrences).bold, true)
 })
