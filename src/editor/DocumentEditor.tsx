@@ -31,6 +31,8 @@ export function DocumentEditor({ initialContent, pastePolicy, enabledTools, pres
       attributes: {
         class: 'document-content',
         'aria-label': 'Documento da atividade',
+        spellcheck: 'true',
+        lang: 'pt-BR',
       },
       handlePaste: (_view, event) => {
         if (pastePolicy === 'allowed') return false

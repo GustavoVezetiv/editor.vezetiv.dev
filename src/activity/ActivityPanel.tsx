@@ -7,9 +7,10 @@ interface ActivityPanelProps {
   results: CheckResult[] | null
   hasUnverifiedChanges: boolean
   onVerify: () => void
+  onHintOpened: (requirementId: string) => void
 }
 
-export function ActivityPanel({ activity, results, hasUnverifiedChanges, onVerify }: ActivityPanelProps) {
+export function ActivityPanel({ activity, results, hasUnverifiedChanges, onVerify, onHintOpened }: ActivityPanelProps) {
   return (
     <aside className="activity-panel" aria-labelledby="activity-title">
       <div className="activity-scroll">
@@ -17,10 +18,10 @@ export function ActivityPanel({ activity, results, hasUnverifiedChanges, onVerif
         <h1 id="activity-title">{activity.title}</h1>
         <p className="activity-description">{activity.description}</p>
 
-        <section className="instruction-section">
-          <h2>O que fazer</h2>
+        <section className="instruction-section" aria-labelledby="objectives-title">
+          <h2 id="objectives-title">Objetivos</h2>
           <ol className="instruction-list">
-            {activity.instructions.map((instruction) => <li key={instruction}>{instruction}</li>)}
+            {activity.requirements.map((requirement) => <li key={requirement.id}>{requirement.objective}</li>)}
           </ol>
         </section>
 
@@ -39,6 +40,8 @@ export function ActivityPanel({ activity, results, hasUnverifiedChanges, onVerif
         results={results}
         hasUnverifiedChanges={hasUnverifiedChanges}
         onVerify={onVerify}
+        activity={activity}
+        onHintOpened={onHintOpened}
       />
     </aside>
   )

@@ -16,9 +16,17 @@ export type EditorTool =
   | 'bulletList'
   | 'orderedList'
 
+export interface ActivityHint {
+  requirementId: string
+  title: string
+  steps: string[]
+}
+
 interface BaseRequirement {
   id: string
   label: string
+  objective: string
+  points: number
 }
 
 export interface HeadingRequirement extends BaseRequirement {
@@ -39,25 +47,36 @@ export interface TextMarkRequirement extends BaseRequirement {
   mark: 'bold' | 'italic' | 'underline'
 }
 
+export interface TextRequirement extends BaseRequirement {
+  type: 'text'
+  text: string
+}
+
 export interface OrderedListRequirement extends BaseRequirement {
   type: 'ordered-list'
   minItems: number
 }
 
-export type ActivityRequirement = HeadingRequirement | AlignmentRequirement | TextMarkRequirement | OrderedListRequirement
+export type ActivityRequirement = HeadingRequirement | AlignmentRequirement | TextMarkRequirement | TextRequirement | OrderedListRequirement
+
+export interface ActivityScoring {
+  totalPoints: number
+}
 
 export interface Activity {
   id: string
   title: string
   description: string
   instructions: string[]
-  sourceText: string
+  sourceText?: string
   initialContent: JSONContent
   enabledTools: EditorTool[]
   pastePolicy: PastePolicy
   verificationMode: VerificationMode
-  defaultDocumentPreset: DocumentPreset
+  documentPreset: DocumentPreset
   requirements: ActivityRequirement[]
+  hints: ActivityHint[]
+  scoring: ActivityScoring
 }
 
 export interface ActivityDocument {
@@ -69,6 +88,7 @@ export interface ActivityDocument {
 }
 
 export interface SavedActivity {
+  attemptId: string
   activityId: string
   documents: ActivityDocument[]
   activeDocumentId: string

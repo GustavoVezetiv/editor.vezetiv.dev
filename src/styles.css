@@ -123,12 +123,18 @@ button:disabled { cursor: not-allowed; }
 .verification-panel > div > p { margin: .2rem 0 0; color: #667085; font-size: .79rem; line-height: 1.4; }
 .check-results { padding-top: .85rem; border-top: 1px solid #eaecf0; }
 .check-summary { margin: 0; color: #475467; font-size: .82rem; font-weight: 700; }
+.score-summary { margin: .25rem 0 0; color: #1d4ed8; font-size: .84rem; font-weight: 800; }
 .check-results ul { display: grid; gap: .52rem; padding: 0; margin: .72rem 0 0; list-style: none; }
 .check-results li { display: flex; align-items: start; gap: .45rem; font-size: .83rem; line-height: 1.35; }
 .check-results li span { width: 1rem; font-weight: 850; text-align: center; }
 .check-results .passed { color: #167047; }
 .check-results .pending { color: #b42318; }
 .check-results small { display: block; margin-top: .2rem; color: #667085; font-size: .73rem; font-weight: 500; }
+.hint-button { display: inline-flex; margin-top: .4rem; padding: .2rem .45rem; color: #1d4ed8; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: .3rem; font-size: .72rem; font-weight: 700; }
+.hint-button:hover { background: #dbeafe; }
+.requirement-hint { margin-top: .45rem; padding: .6rem .7rem; color: #475467; background: #f8fafc; border: 1px solid #dfe4ec; border-radius: .35rem; font-size: .75rem; }
+.requirement-hint strong { color: #344054; }
+.requirement-hint ol { display: grid; gap: .28rem; margin: .4rem 0 0; padding-left: 1.1rem; }
 .verification-pending { margin: -.15rem 0 0; padding: .55rem .65rem; color: #8a5b00; background: #fffaeb; border: 1px solid #fedf89; border-radius: .35rem; font-size: .76rem; line-height: 1.35; }
 
 .paste-notice { position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 20; max-width: 28rem; padding: .9rem 1rem; color: #694f14; background: #fffaeb; border: 1px solid #f3d58a; border-radius: .5rem; box-shadow: 0 8px 22px rgb(53 42 16 / 14%); font-size: .88rem; line-height: 1.4; }

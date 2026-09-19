@@ -4,18 +4,21 @@ import { ActivityPanel } from './activity/ActivityPanel'
 import { activity01 } from './config/activity01'
 import { DocumentTabs } from './documents/DocumentTabs'
 import { DocumentEditor } from './editor/DocumentEditor'
+import { createPedagogicalEvent, logPedagogicalEvent, type PedagogicalEventType } from './events/pedagogicalEvents'
 import { exportDocument, type ExportFormat } from './export/documentExport'
-import type { ActivityDocument, DocumentPreset, SavedActivity } from './types/activity'
+import type { Activity, ActivityDocument, DocumentPreset, SavedActivity } from './types/activity'
 import { loadSavedActivity, saveActivity } from './utils/storage'
 import { type CheckResult, verifyActivity } from './verification/verifyActivity'
 
-function createDocument(name: string, content: JSONContent = activity01.initialContent): ActivityDocument {
+const activity: Activity = activity01
+
+function createDocument(name: string, content: JSONContent = activity.initialContent): ActivityDocument {
   const updatedAt = new Date().toISOString()
   return {
     id: `document-${crypto.randomUUID()}`,
     name,
     content,
-    preset: activity01.defaultDocumentPreset,
+    preset: activity.documentPreset,
     updatedAt,
   }
 }
@@ -23,7 +26,8 @@ function createDocument(name: string, content: JSONContent = activity01.initialC
 function createInitialWorkspace(): SavedActivity {
   const document = createDocument('Documento 1')
   return {
-    activityId: activity01.id,
+    attemptId: `attempt-${crypto.randomUUID()}`,
+    activityId: activity.id,
     documents: [document],
     activeDocumentId: document.id,
     savedAt: document.updatedAt,
@@ -37,7 +41,7 @@ function documentHasContent(document: ActivityDocument): boolean {
   return readText(document.content).trim().length > 0
 }
 
-const restoredWorkspace = loadSavedActivity(activity01) ?? createInitialWorkspace()
+const restoredWorkspace = loadSavedActivity(activity) ?? createInitialWorkspace()
 
 function App() {
   const [documents, setDocuments] = useState<ActivityDocument[]>(restoredWorkspace.documents)
@@ -54,11 +58,23 @@ function App() {
   const activeDocumentIdRef = useRef(activeDocumentId)
   const saveTimerRef = useRef<number | null>(null)
   const noticeTimerRef = useRef<number | null>(null)
+  const activityStartedRef = useRef(false)
+
+  const trackEvent = useCallback((type: PedagogicalEventType, documentId: string, metadata: Record<string, unknown> = {}) => {
+    logPedagogicalEvent(createPedagogicalEvent({
+      activityId: activity.id,
+      attemptId: restoredWorkspace.attemptId,
+      documentId,
+      type,
+      metadata,
+    }))
+  }, [])
 
   const persistWorkspace = useCallback((nextDocuments: ActivityDocument[], nextActiveDocumentId: string) => {
     const savedAt = new Date().toISOString()
     const saved = saveActivity({
-      activityId: activity01.id,
+      attemptId: restoredWorkspace.attemptId,
+      activityId: activity.id,
       documents: nextDocuments,
       activeDocumentId: nextActiveDocumentId,
       savedAt,
@@ -103,6 +119,12 @@ function App() {
     }
   }, [persistWorkspace])
 
+  useEffect(() => {
+    if (activityStartedRef.current) return
+    activityStartedRef.current = true
+    trackEvent('activity_started', activeDocumentIdRef.current)
+  }, [trackEvent])
+
   const activeDocument = documents.find((document) => document.id === activeDocumentId) ?? documents[0]
   const verification = resultsByDocument[activeDocument.id] ?? null
   const hasUnverifiedChanges = dirtyVerification[activeDocument.id] ?? false
@@ -115,8 +137,8 @@ function App() {
       : document)
     updateWorkspace(nextDocuments)
 
-    if (activity01.verificationMode === 'live') {
-      setResultsByDocument((current) => ({ ...current, [documentId]: verifyActivity(content, activity01) }))
+    if (activity.verificationMode === 'live') {
+      setResultsByDocument((current) => ({ ...current, [documentId]: verifyActivity(content, activity) }))
       setDirtyVerification((current) => ({ ...current, [documentId]: false }))
     } else {
       setDirtyVerification((current) => ({ ...current, [documentId]: true }))
@@ -126,9 +148,13 @@ function App() {
   const handleVerify = useCallback(() => {
     const currentDocument = documentsRef.current.find((document) => document.id === activeDocumentIdRef.current)
     if (!currentDocument) return
-    setResultsByDocument((current) => ({ ...current, [currentDocument.id]: verifyActivity(currentDocument.content, activity01) }))
+    const results = verifyActivity(currentDocument.content, activity)
+    setResultsByDocument((current) => ({ ...current, [currentDocument.id]: results }))
     setDirtyVerification((current) => ({ ...current, [currentDocument.id]: false }))
-  }, [])
+    trackEvent('verification_requested', currentDocument.id)
+    results.filter((result) => result.passed).forEach((result) => trackEvent('requirement_passed', currentDocument.id, { requirementId: result.id }))
+    if (results.every((result) => result.passed)) trackEvent('activity_completed', currentDocument.id)
+  }, [trackEvent])
 
   const handlePresetChange = useCallback((preset: DocumentPreset) => {
     const documentId = activeDocumentIdRef.current
@@ -137,7 +163,8 @@ function App() {
       ? { ...document, preset, updatedAt: timestamp }
       : document)
     updateWorkspace(nextDocuments)
-  }, [updateWorkspace])
+    trackEvent('preset_changed', documentId, { preset })
+  }, [trackEvent, updateWorkspace])
 
   const handleSelectDocument = useCallback((documentId: string) => {
     if (!documentsRef.current.some((document) => document.id === documentId)) return
@@ -169,10 +196,15 @@ function App() {
   }, [updateWorkspace])
 
   const showPasteNotice = useCallback(() => {
+    trackEvent('paste_blocked', activeDocumentIdRef.current)
     setPasteNotice(true)
     if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current)
     noticeTimerRef.current = window.setTimeout(() => setPasteNotice(false), 4200)
-  }, [])
+  }, [trackEvent])
+
+  const handleHintOpened = useCallback((requirementId: string) => {
+    trackEvent('hint_opened', activeDocumentIdRef.current, { requirementId })
+  }, [trackEvent])
 
   const handleExport = useCallback(async (format: ExportFormat) => {
     const currentDocument = documentsRef.current.find((document) => document.id === activeDocumentIdRef.current)
@@ -205,16 +237,17 @@ function App() {
 
       <div className="workbench">
         <ActivityPanel
-          activity={activity01}
+          activity={activity}
           results={verification}
           hasUnverifiedChanges={hasUnverifiedChanges}
           onVerify={handleVerify}
+          onHintOpened={handleHintOpened}
         />
         <div className="editor-column">
           <DocumentTabs
             documents={documents}
             activeDocumentId={activeDocument.id}
-            verificationMode={activity01.verificationMode}
+            verificationMode={activity.verificationMode}
             onSelect={handleSelectDocument}
             onCreate={handleCreateDocument}
             onRename={handleRenameDocument}
@@ -227,8 +260,8 @@ function App() {
             key={activeDocument.id}
             initialContent={activeDocument.content}
             preset={activeDocument.preset}
-            enabledTools={activity01.enabledTools}
-            pastePolicy={activity01.pastePolicy}
+            enabledTools={activity.enabledTools}
+            pastePolicy={activity.pastePolicy}
             onDocumentChange={handleDocumentChange}
             onBlockedInput={showPasteNotice}
           />
