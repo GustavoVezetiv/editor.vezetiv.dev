@@ -1,25 +1,49 @@
 # Editor Vezetiv
 
-Protótipo frontend de um editor educacional para praticar competências de edição de documentos. A proposta é que a IA possa orientar o estudante, enquanto a execução das operações acontece no editor.
+Plataforma de aprendizagem prática de edição de documentos. O editor Tiptap é a infraestrutura; o produto é o ciclo **LER → ENTENDER → EXECUTAR → VERIFICAR → CORRIGIR → CONCLUIR**.
 
-## Desenvolvimento
+## Rodar localmente
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Arquitetura pedagógica
+Abra `/join`, informe `DEMO` como código da turma e uma identificação própria. A aplicação funciona sem serviços externos, persistindo dados de demonstração no `localStorage` do navegador.
 
-A `Activity` é a unidade central: ela declara objetivos, requisitos estruturais tipados, dicas procedurais, pontuação, ferramentas liberadas, política de colagem, preset e modo de verificação. O editor é a infraestrutura em que o aluno executa as operações.
+## Arquitetura
 
-As dicas apenas explicam o procedimento. A verificação é manual, preserva o último resultado após edições e indica quando é preciso verificar novamente. Eventos pedagógicos possuem modelo TypeScript isolado para uma futura integração de backend, sem serem acumulados no `localStorage`.
+- `Activity`: configuração reutilizável com slug, disponibilidade, destaque semanal, ferramentas, política de colagem, preset, requirements, dicas e pontuação.
+- Engine de verificação: avalia nós reais do Tiptap (heading, alinhamento, marcas, listas, preset e conteúdo de texto). Lista digitada manualmente não passa como `orderedList`/`bulletList`.
+- `ActivityAttempt`: isola documentos, verificações, score e eventos de cada aluno por atividade.
+- Repositório local: permite o fluxo completo sem Supabase; a camada `src/services/supabase.ts` ativa o cliente quando as variáveis públicas estiverem configuradas.
+- Professor: `/teacher` apresenta painel, tentativas, score, verificações, documento e timeline de eventos.
 
-## Verificação técnica
+## Atividades, dicas e score
+
+Cada requirement possui objetivo, pontos e, quando necessário, uma dica procedural. Dicas nunca executam operações pelo aluno. A verificação manual preserva o último resultado e exige uma nova verificação depois de alterações. O score é a soma dos requirements atendidos.
+
+O texto pode usar `exact`, `normalized` ou `similarity`; similaridade é local e determinística, sem IA ou API externa.
+
+## Supabase
+
+Copie `.env.example` para `.env.local` e preencha apenas chaves públicas:
 
 ```bash
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+```
+
+A migração inicial está em [supabase/migrations/20260919000000_learning_platform.sql](supabase/migrations/20260919000000_learning_platform.sql). Ela define classes, alunos, atividades, tentativas, documentos, verificações e eventos, com RLS habilitado.
+
+Ainda não há autenticação Supabase no frontend. Portanto, as políticas de professor ficam deliberadamente adiadas: não use o modo remoto para dados reais até conectar a identidade de aluno/professor a `auth.users` e revisar os grants e as políticas de docente.
+
+## Testes
+
+```bash
+npm test
 npm run lint
 npm run build
 ```
 
-O MVP inclui atividade de formatação básica, autosave em `localStorage`, bloqueio configurável de colagem, verificação manual com score, abas de documentos independentes, presets Acadêmico (ABNT) e Normal e exportação do documento ativo em DOCX ou PDF.
+Os testes cobrem verificação estrutural, texto normalizado/similaridade, score, presets, exportação, storage, eventos, tentativa e ranking local.

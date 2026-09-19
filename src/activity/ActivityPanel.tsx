@@ -8,9 +8,11 @@ interface ActivityPanelProps {
   hasUnverifiedChanges: boolean
   onVerify: () => void
   onHintOpened: (requirementId: string) => void
+  onComplete: () => void
+  isCompleted: boolean
 }
 
-export function ActivityPanel({ activity, results, hasUnverifiedChanges, onVerify, onHintOpened }: ActivityPanelProps) {
+export function ActivityPanel({ activity, results, hasUnverifiedChanges, onVerify, onHintOpened, onComplete, isCompleted }: ActivityPanelProps) {
   return (
     <aside className="activity-panel" aria-labelledby="activity-title">
       <div className="activity-scroll">
@@ -43,6 +45,9 @@ export function ActivityPanel({ activity, results, hasUnverifiedChanges, onVerif
         activity={activity}
         onHintOpened={onHintOpened}
       />
+      <button className="complete-button" type="button" onClick={onComplete} disabled={isCompleted}>
+        {isCompleted ? 'Atividade concluída' : 'Concluir atividade'}
+      </button>
     </aside>
   )
 }

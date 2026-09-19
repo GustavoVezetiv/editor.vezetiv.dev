@@ -1,277 +1,58 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import type { JSONContent } from '@tiptap/core'
-import { ActivityPanel } from './activity/ActivityPanel'
-import { activity01 } from './config/activity01'
-import { DocumentTabs } from './documents/DocumentTabs'
-import { DocumentEditor } from './editor/DocumentEditor'
-import { createPedagogicalEvent, logPedagogicalEvent, type PedagogicalEventType } from './events/pedagogicalEvents'
-import { exportDocument, type ExportFormat } from './export/documentExport'
-import type { Activity, ActivityDocument, DocumentPreset, SavedActivity } from './types/activity'
-import { loadSavedActivity, saveActivity } from './utils/storage'
-import { type CheckResult, verifyActivity } from './verification/verifyActivity'
+import { useState } from 'react'
+import { ActivityWorkspace } from './activity/ActivityWorkspace'
+import { platformRepository } from './services/platformRepository'
+import { isSupabaseConfigured } from './services/supabase'
+import { JoinPage } from './student/JoinPage'
+import { StudentHome } from './student/StudentHome'
+import { TeacherPage } from './teacher/TeacherPage'
+import type { Activity } from './types/activity'
+import type { ActivityAttempt, Student } from './types/platform'
 
-const activity: Activity = activity01
-
-function createDocument(name: string, content: JSONContent = activity.initialContent): ActivityDocument {
-  const updatedAt = new Date().toISOString()
-  return {
-    id: `document-${crypto.randomUUID()}`,
-    name,
-    content,
-    preset: activity.documentPreset,
-    updatedAt,
-  }
-}
-
-function createInitialWorkspace(): SavedActivity {
-  const document = createDocument('Documento 1')
-  return {
-    attemptId: `attempt-${crypto.randomUUID()}`,
-    activityId: activity.id,
-    documents: [document],
-    activeDocumentId: document.id,
-    savedAt: document.updatedAt,
-  }
-}
-
-function documentHasContent(document: ActivityDocument): boolean {
-  const readText = (node: JSONContent): string => node.type === 'text'
-    ? node.text ?? ''
-    : (node.content ?? []).map(readText).join('')
-  return readText(document.content).trim().length > 0
-}
-
-const restoredWorkspace = loadSavedActivity(activity) ?? createInitialWorkspace()
+const SESSION_KEY = 'editor-vezetiv:student-id'
+type Route = 'join' | 'home' | 'activity' | 'teacher'
+const routeForPath = (): Route => location.pathname === '/join' ? 'join' : location.pathname === '/teacher' ? 'teacher' : location.pathname.startsWith('/activity/') ? 'activity' : 'home'
 
 function App() {
-  const [documents, setDocuments] = useState<ActivityDocument[]>(restoredWorkspace.documents)
-  const [activeDocumentId, setActiveDocumentId] = useState(restoredWorkspace.activeDocumentId)
-  const [lastSavedAt, setLastSavedAt] = useState<string | null>(restoredWorkspace.savedAt)
-  const [isSaving, setIsSaving] = useState(false)
-  const [saveFailed, setSaveFailed] = useState(false)
-  const [pasteNotice, setPasteNotice] = useState(false)
-  const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null)
-  const [exportError, setExportError] = useState<string | null>(null)
-  const [resultsByDocument, setResultsByDocument] = useState<Record<string, CheckResult[]>>({})
-  const [dirtyVerification, setDirtyVerification] = useState<Record<string, boolean>>({})
-  const documentsRef = useRef(documents)
-  const activeDocumentIdRef = useRef(activeDocumentId)
-  const saveTimerRef = useRef<number | null>(null)
-  const noticeTimerRef = useRef<number | null>(null)
-  const activityStartedRef = useRef(false)
+  const [route, setRoute] = useState<Route>(routeForPath)
+  const [student, setStudent] = useState<Student | undefined>(() => {
+    const id = localStorage.getItem(SESSION_KEY)
+    return id ? platformRepository.getStudent(id) : undefined
+  })
+  const [activities, setActivities] = useState(() => platformRepository.listActivities())
+  const [attempts, setAttempts] = useState<ActivityAttempt[]>(() => student ? platformRepository.dashboard().attempts.filter((attempt) => attempt.studentId === student.id) : [])
+  const [activeActivity, setActiveActivity] = useState<Activity | null>(null)
+  const [activeAttempt, setActiveAttempt] = useState<ActivityAttempt | null>(null)
+  const navigate = (next: Route, path: string) => { history.pushState({}, '', path); setRoute(next) }
+  const dashboard = platformRepository.dashboard()
 
-  const trackEvent = useCallback((type: PedagogicalEventType, documentId: string, metadata: Record<string, unknown> = {}) => {
-    logPedagogicalEvent(createPedagogicalEvent({
-      activityId: activity.id,
-      attemptId: restoredWorkspace.attemptId,
-      documentId,
-      type,
-      metadata,
-    }))
-  }, [])
+  const join = (classCode: string, studentCode: string, displayName: string) => {
+    const joined = platformRepository.join(classCode, studentCode, displayName)
+    localStorage.setItem(SESSION_KEY, joined.id)
+    setStudent(joined)
+    setAttempts(platformRepository.dashboard().attempts.filter((attempt) => attempt.studentId === joined.id))
+    navigate('home', '/')
+  }
+  const openActivity = (activity: Activity) => {
+    if (!student) { navigate('join', '/join'); return }
+    const attempt = platformRepository.openAttempt(student.id, activity)
+    setActiveActivity(activity); setActiveAttempt(attempt)
+    setAttempts((current) => [...current.filter((item) => item.id !== attempt.id), attempt])
+    navigate('activity', `/activity/${activity.slug}`)
+  }
+  const saveAttempt = (attempt: ActivityAttempt) => {
+    const saved = platformRepository.saveAttempt(attempt)
+    setActiveAttempt(saved)
+    setAttempts((current) => [...current.filter((item) => item.id !== saved.id), saved])
+  }
+  const leave = () => { localStorage.removeItem(SESSION_KEY); setStudent(undefined); setAttempts([]); navigate('join', '/join') }
+  const backHome = () => navigate('home', '/')
 
-  const persistWorkspace = useCallback((nextDocuments: ActivityDocument[], nextActiveDocumentId: string) => {
-    const savedAt = new Date().toISOString()
-    const saved = saveActivity({
-      attemptId: restoredWorkspace.attemptId,
-      activityId: activity.id,
-      documents: nextDocuments,
-      activeDocumentId: nextActiveDocumentId,
-      savedAt,
-    })
-    setSaveFailed(!saved)
-    if (saved) setLastSavedAt(savedAt)
-    setIsSaving(false)
-  }, [])
+  if (route === 'teacher') return <TeacherPage dashboard={dashboard} onCreateActivity={(activity) => { platformRepository.createActivity(activity); setActivities(platformRepository.listActivities()) }} onBack={backHome} />
+  if (!student || route === 'join') return <JoinPage onJoin={join} />
+  if (route === 'activity' && activeActivity && activeAttempt) return <ActivityWorkspace key={activeAttempt.id} activity={activeActivity} student={student} initialAttempt={activeAttempt} onSaveAttempt={saveAttempt} onBack={backHome} />
 
-  const scheduleSave = useCallback((nextDocuments: ActivityDocument[], nextActiveDocumentId: string) => {
-    setIsSaving(true)
-    setSaveFailed(false)
-    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = window.setTimeout(() => {
-      saveTimerRef.current = null
-      persistWorkspace(nextDocuments, nextActiveDocumentId)
-    }, 500)
-  }, [persistWorkspace])
-
-  const updateWorkspace = useCallback((nextDocuments: ActivityDocument[], nextActiveDocumentId = activeDocumentIdRef.current) => {
-    documentsRef.current = nextDocuments
-    activeDocumentIdRef.current = nextActiveDocumentId
-    setDocuments(nextDocuments)
-    setActiveDocumentId(nextActiveDocumentId)
-    scheduleSave(nextDocuments, nextActiveDocumentId)
-  }, [scheduleSave])
-
-  useEffect(() => {
-    const saveBeforeExit = () => {
-      if (saveTimerRef.current) {
-        window.clearTimeout(saveTimerRef.current)
-        saveTimerRef.current = null
-        persistWorkspace(documentsRef.current, activeDocumentIdRef.current)
-      }
-    }
-
-    window.addEventListener('pagehide', saveBeforeExit)
-    return () => {
-      window.removeEventListener('pagehide', saveBeforeExit)
-      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
-      if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current)
-    }
-  }, [persistWorkspace])
-
-  useEffect(() => {
-    if (activityStartedRef.current) return
-    activityStartedRef.current = true
-    trackEvent('activity_started', activeDocumentIdRef.current)
-  }, [trackEvent])
-
-  const activeDocument = documents.find((document) => document.id === activeDocumentId) ?? documents[0]
-  const verification = resultsByDocument[activeDocument.id] ?? null
-  const hasUnverifiedChanges = dirtyVerification[activeDocument.id] ?? false
-
-  const handleDocumentChange = useCallback((content: JSONContent) => {
-    const documentId = activeDocumentIdRef.current
-    const timestamp = new Date().toISOString()
-    const nextDocuments = documentsRef.current.map((document) => document.id === documentId
-      ? { ...document, content, updatedAt: timestamp }
-      : document)
-    updateWorkspace(nextDocuments)
-
-    if (activity.verificationMode === 'live') {
-      setResultsByDocument((current) => ({ ...current, [documentId]: verifyActivity(content, activity) }))
-      setDirtyVerification((current) => ({ ...current, [documentId]: false }))
-    } else {
-      setDirtyVerification((current) => ({ ...current, [documentId]: true }))
-    }
-  }, [updateWorkspace])
-
-  const handleVerify = useCallback(() => {
-    const currentDocument = documentsRef.current.find((document) => document.id === activeDocumentIdRef.current)
-    if (!currentDocument) return
-    const results = verifyActivity(currentDocument.content, activity)
-    setResultsByDocument((current) => ({ ...current, [currentDocument.id]: results }))
-    setDirtyVerification((current) => ({ ...current, [currentDocument.id]: false }))
-    trackEvent('verification_requested', currentDocument.id)
-    results.filter((result) => result.passed).forEach((result) => trackEvent('requirement_passed', currentDocument.id, { requirementId: result.id }))
-    if (results.every((result) => result.passed)) trackEvent('activity_completed', currentDocument.id)
-  }, [trackEvent])
-
-  const handlePresetChange = useCallback((preset: DocumentPreset) => {
-    const documentId = activeDocumentIdRef.current
-    const timestamp = new Date().toISOString()
-    const nextDocuments = documentsRef.current.map((document) => document.id === documentId
-      ? { ...document, preset, updatedAt: timestamp }
-      : document)
-    updateWorkspace(nextDocuments)
-    trackEvent('preset_changed', documentId, { preset })
-  }, [trackEvent, updateWorkspace])
-
-  const handleSelectDocument = useCallback((documentId: string) => {
-    if (!documentsRef.current.some((document) => document.id === documentId)) return
-    updateWorkspace(documentsRef.current, documentId)
-  }, [updateWorkspace])
-
-  const handleCreateDocument = useCallback(() => {
-    const document = createDocument(`Documento ${documentsRef.current.length + 1}`)
-    updateWorkspace([...documentsRef.current, document], document.id)
-  }, [updateWorkspace])
-
-  const handleRenameDocument = useCallback((documentId: string) => {
-    const document = documentsRef.current.find((item) => item.id === documentId)
-    if (!document) return
-    const name = window.prompt('Nome do documento:', document.name)?.trim()
-    if (!name || name === document.name) return
-    updateWorkspace(documentsRef.current.map((item) => item.id === documentId ? { ...item, name, updatedAt: new Date().toISOString() } : item))
-  }, [updateWorkspace])
-
-  const handleCloseDocument = useCallback((documentId: string) => {
-    if (documentsRef.current.length === 1) return
-    const document = documentsRef.current.find((item) => item.id === documentId)
-    if (!document) return
-    if (documentHasContent(document) && !window.confirm(`Excluir “${document.name}”? Esta ação não pode ser desfeita.`)) return
-
-    const nextDocuments = documentsRef.current.filter((item) => item.id !== documentId)
-    const nextActiveDocumentId = documentId === activeDocumentIdRef.current ? nextDocuments[0].id : activeDocumentIdRef.current
-    updateWorkspace(nextDocuments, nextActiveDocumentId)
-  }, [updateWorkspace])
-
-  const showPasteNotice = useCallback(() => {
-    trackEvent('paste_blocked', activeDocumentIdRef.current)
-    setPasteNotice(true)
-    if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current)
-    noticeTimerRef.current = window.setTimeout(() => setPasteNotice(false), 4200)
-  }, [trackEvent])
-
-  const handleHintOpened = useCallback((requirementId: string) => {
-    trackEvent('hint_opened', activeDocumentIdRef.current, { requirementId })
-  }, [trackEvent])
-
-  const handleExport = useCallback(async (format: ExportFormat) => {
-    const currentDocument = documentsRef.current.find((document) => document.id === activeDocumentIdRef.current)
-    if (!currentDocument) return
-    setExportingFormat(format)
-    setExportError(null)
-    try {
-      await exportDocument(currentDocument.content, format, currentDocument.name, currentDocument.preset)
-    } catch {
-      setExportError(`Não foi possível exportar “${currentDocument.name}” em ${format.toUpperCase()}.`)
-    } finally {
-      setExportingFormat(null)
-    }
-  }, [])
-
-  const saveLabel = saveFailed ? 'Não foi possível salvar' : isSaving ? 'Salvando…' : 'Salvo ✓'
-  const saveTitle = saveFailed
-    ? 'O armazenamento deste navegador não está disponível.'
-    : lastSavedAt
-      ? `Última alteração salva às ${new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(new Date(lastSavedAt))}`
-      : 'As alterações serão salvas automaticamente'
-
-  return (
-    <main className="app-shell">
-      <header className="app-header">
-        <a className="brand" href="/" aria-label="Editor Vezetiv, início"><span className="brand-mark" aria-hidden="true">V</span><span>Editor Vezetiv</span></a>
-        <div className="header-activity">{activity01.title}</div>
-        <div className={`save-status ${isSaving ? 'saving' : ''} ${saveFailed ? 'failed' : ''}`} title={saveTitle} aria-live="polite">{saveLabel}</div>
-      </header>
-
-      <div className="workbench">
-        <ActivityPanel
-          activity={activity}
-          results={verification}
-          hasUnverifiedChanges={hasUnverifiedChanges}
-          onVerify={handleVerify}
-          onHintOpened={handleHintOpened}
-        />
-        <div className="editor-column">
-          <DocumentTabs
-            documents={documents}
-            activeDocumentId={activeDocument.id}
-            verificationMode={activity.verificationMode}
-            onSelect={handleSelectDocument}
-            onCreate={handleCreateDocument}
-            onRename={handleRenameDocument}
-            onClose={handleCloseDocument}
-            onPresetChange={handlePresetChange}
-            onExport={handleExport}
-            exportingFormat={exportingFormat}
-          />
-          <DocumentEditor
-            key={activeDocument.id}
-            initialContent={activeDocument.content}
-            preset={activeDocument.preset}
-            enabledTools={activity.enabledTools}
-            pastePolicy={activity.pastePolicy}
-            onDocumentChange={handleDocumentChange}
-            onBlockedInput={showPasteNotice}
-          />
-        </div>
-      </div>
-
-      {pasteNotice && <div className="paste-notice" role="status">A colagem está desativada nesta atividade. Digite o conteúdo utilizando o editor.</div>}
-      {exportError && <div className="export-notice" role="alert">{exportError}</div>}
-    </main>
-  )
+  const featured = activities.find((activity) => activity.isFeatured)
+  return <><StudentHome student={student} activities={activities} attempts={attempts} ranking={featured ? platformRepository.ranking(featured.id) : []} onOpen={openActivity} onLeave={leave} /><a className="teacher-link" href="/teacher" onClick={(event) => { event.preventDefault(); navigate('teacher', '/teacher') }}>Painel docente {isSupabaseConfigured ? '· Supabase configurado' : '· modo local'}</a></>
 }
 
 export default App
