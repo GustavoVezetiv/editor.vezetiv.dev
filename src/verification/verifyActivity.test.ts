@@ -25,7 +25,7 @@ const correctDocument: JSONContent = {
       content: [
         { type: 'text', text: 'A ' },
         { type: 'text', text: 'sustentabilidade', marks: [{ type: 'bold' }] },
-        { type: 'text', text: ' depende de escolhas responsáveis.' },
+        { type: 'text', text: ' depende de escolhas responsáveis no presente para preservar os recursos naturais no futuro.' },
       ],
     },
     { type: 'orderedList', content: [listItem('Primeiro item'), listItem('Segundo item'), listItem('Terceiro item')] },
@@ -33,7 +33,7 @@ const correctDocument: JSONContent = {
 }
 
 test('aprova o documento que atende todos os requisitos semânticos', () => {
-  assert.deepEqual(resultsFor(correctDocument), { title: true, alignment: true, bold: true, list: true })
+  assert.deepEqual(resultsFor(correctDocument), { title: true, alignment: true, 'source-text': true, bold: true, list: true })
 })
 
 test('exige heading principal correto e centralizado', () => {
@@ -50,9 +50,9 @@ test('exige heading principal correto e centralizado', () => {
     content: [{ type: 'heading', attrs: { level: 1, textAlign: 'center' }, content: [{ type: 'text', text: 'Outro título' }] }],
   }
 
-  assert.deepEqual(resultsFor(titleAsParagraph), { title: false, alignment: false, bold: false, list: false })
-  assert.deepEqual(resultsFor(uncenteredHeading), { title: true, alignment: false, bold: false, list: false })
-  assert.deepEqual(resultsFor(otherHeading), { title: false, alignment: false, bold: false, list: false })
+  assert.deepEqual(resultsFor(titleAsParagraph), { title: false, alignment: false, 'source-text': false, bold: false, list: false })
+  assert.deepEqual(resultsFor(uncenteredHeading), { title: true, alignment: false, 'source-text': false, bold: false, list: false })
+  assert.deepEqual(resultsFor(otherHeading), { title: false, alignment: false, 'source-text': false, bold: false, list: false })
 })
 
 test('aceita espaços e caracteres invisíveis no título correto, mas não outro título', () => {
@@ -103,6 +103,15 @@ test('exige a palavra inteira em negrito e uma lista numerada com três itens', 
   assert.equal(resultsFor(wrongWord).bold, false)
   assert.equal(resultsFor(twoItemList).list, false)
   assert.equal(resultsFor(bulletList).list, false)
+})
+
+test('não aceita texto que apenas imita uma lista numerada', () => {
+  const simulatedList: JSONContent = {
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text: '1 - Primeiro\n2 - Segundo\n3 - Terceiro' }] }],
+  }
+
+  assert.equal(resultsFor(simulatedList).list, false)
 })
 
 test('mantém o requisito de negrito quando outra ocorrência não está em negrito', () => {

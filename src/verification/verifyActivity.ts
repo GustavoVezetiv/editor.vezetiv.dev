@@ -5,7 +5,7 @@ export interface CheckResult {
   id: string
   label: string
   passed: boolean
-  hint?: string
+  points: number
 }
 
 function getText(node: JSONContent): string {
@@ -33,6 +33,10 @@ function hasWholeWord(value: string, expected: string): boolean {
 }
 
 function passesRequirement(content: JSONContent, requirement: ActivityRequirement): boolean {
+  if (requirement.type === 'text') {
+    return normalizeText(getText(content)).includes(normalizeText(requirement.text))
+  }
+
   if (requirement.type === 'heading') {
     let matched = false
     walk(content, (node) => {
@@ -75,8 +79,6 @@ export function verifyActivity(content: JSONContent, activity: Activity): CheckR
     id: requirement.id,
     label: requirement.label,
     passed: passesRequirement(content, requirement),
-    hint: requirement.type === 'heading'
-      ? `Use “${requirement.text}” exatamente como Título ${requirement.level}.`
-      : undefined,
+    points: requirement.points,
   }))
 }

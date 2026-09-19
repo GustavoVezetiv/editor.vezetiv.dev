@@ -29,6 +29,7 @@ test('ignora dados de armazenamento corrompidos ou estruturalmente inválidos', 
 
 test('retorna o resultado de falha ao salvar sem deixar a aplicação lançar erro', () => {
   const savedActivity: SavedActivity = {
+    attemptId: 'attempto-teste',
     activityId: activity01.id,
     activeDocumentId: 'documento-1',
     documents: [{
@@ -59,4 +60,19 @@ test('migra o autosave anterior para a primeira aba sem perder o conteúdo', () 
   assert.equal(restored?.documents.length, 1)
   assert.equal(restored?.documents[0].name, 'Documento 1')
   assert.equal(restored?.documents[0].preset, 'academic-abnt')
+  assert.equal(restored?.attemptId, 'attempto-local-legado')
+})
+
+test('migra o workspace existente para uma tentativa local', () => {
+  values.set(key, JSON.stringify({
+    activityId: activity01.id,
+    activeDocumentId: 'documento-1',
+    documents: [{
+      id: 'documento-1', name: 'Documento 1', content: activity01.initialContent,
+      preset: 'normal', updatedAt: '2026-01-01T00:00:00.000Z',
+    }],
+    savedAt: '2026-01-01T00:00:00.000Z',
+  }))
+
+  assert.equal(loadSavedActivity(activity01)?.attemptId, 'attempto-local-legado')
 })

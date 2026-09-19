@@ -1,15 +1,27 @@
-import type { VerificationMode } from '../types/activity'
+import { useState } from 'react'
+import type { Activity, VerificationMode } from '../types/activity'
+import { calculateScore } from './scoring'
 import type { CheckResult } from './verifyActivity'
 
 interface VerificationPanelProps {
+  activity: Activity
   mode: VerificationMode
   results: CheckResult[] | null
   hasUnverifiedChanges: boolean
   onVerify: () => void
+  onHintOpened: (requirementId: string) => void
 }
 
-export function VerificationPanel({ mode, results, hasUnverifiedChanges, onVerify }: VerificationPanelProps) {
+export function VerificationPanel({ activity, mode, results, hasUnverifiedChanges, onVerify, onHintOpened }: VerificationPanelProps) {
+  const [openHintId, setOpenHintId] = useState<string | null>(null)
   const completed = results?.filter((result) => result.passed).length ?? 0
+  const score = results ? calculateScore(activity, results) : null
+
+  const toggleHint = (requirementId: string) => {
+    const willOpen = openHintId !== requirementId
+    setOpenHintId(willOpen ? requirementId : null)
+    if (willOpen) onHintOpened(requirementId)
+  }
 
   return (
     <section className="verification-panel" aria-labelledby="verification-title">
@@ -18,17 +30,37 @@ export function VerificationPanel({ mode, results, hasUnverifiedChanges, onVerif
         <p>{mode === 'manual' ? 'Leia, execute e verifique quando estiver pronto.' : 'Atualizado automaticamente conforme você edita.'}</p>
       </div>
       {mode === 'manual' && <button className="verify-button" type="button" onClick={onVerify}>Verificar atividade</button>}
-      {hasUnverifiedChanges && results && <p className="verification-pending" role="status">Há alterações não verificadas neste documento.</p>}
+      {hasUnverifiedChanges && results && <p className="verification-pending" role="status">O documento foi alterado. Verifique novamente.</p>}
       {results && (
         <div className="check-results" aria-live="polite">
           <p className="check-summary">{completed} de {results.length} requisitos concluídos</p>
+          {score && <p className="score-summary">{score.earnedPoints} / {score.totalPoints} pontos</p>}
           <ul>
-            {results.map((result) => (
-              <li className={result.passed ? 'passed' : 'pending'} key={result.id}>
-                <span aria-hidden="true">{result.passed ? '✓' : '×'}</span>
-                <span>{result.label}{!result.passed && result.hint ? <small>{result.hint}</small> : null}</span>
-              </li>
-            ))}
+            {results.map((result) => {
+              const hint = activity.hints.find((item) => item.requirementId === result.id)
+              const isHintOpen = openHintId === result.id
+              return (
+                <li className={result.passed ? 'passed' : 'pending'} key={result.id}>
+                  <span aria-hidden="true">{result.passed ? '✓' : '×'}</span>
+                  <div>
+                    <span>{result.label} <small>({result.points} pontos)</small></span>
+                    {!result.passed && hint && (
+                      <>
+                        <button className="hint-button" type="button" aria-expanded={isHintOpen} onClick={() => toggleHint(result.id)}>
+                          {isHintOpen ? 'Ocultar dica' : 'Como fazer?'}
+                        </button>
+                        {isHintOpen && (
+                          <div className="requirement-hint">
+                            <strong>{hint.title}</strong>
+                            <ol>{hint.steps.map((step) => <li key={step}>{step}</li>)}</ol>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         </div>
       )}

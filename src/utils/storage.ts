@@ -19,6 +19,7 @@ function isSavedActivity(value: unknown, activityId: string): value is SavedActi
   if (typeof value !== 'object' || value === null) return false
   const saved = value as Partial<SavedActivity>
   return saved.activityId === activityId
+    && typeof saved.attemptId === 'string'
     && typeof saved.savedAt === 'string'
     && typeof saved.activeDocumentId === 'string'
     && Array.isArray(saved.documents)
@@ -36,17 +37,32 @@ function migrateLegacyActivity(value: unknown, activity: Activity): SavedActivit
   }
 
   return {
+    attemptId: 'attempto-local-legado',
     activityId: activity.id,
     activeDocumentId: 'documento-1',
     documents: [{
       id: 'documento-1',
       name: 'Documento 1',
       content: legacy.content as JSONContent,
-      preset: activity.defaultDocumentPreset,
+      preset: activity.documentPreset,
       updatedAt: legacy.savedAt,
     }],
     savedAt: legacy.savedAt,
   }
+}
+
+function migrateWorkspaceWithoutAttempt(value: unknown, activityId: string): SavedActivity | null {
+  if (typeof value !== 'object' || value === null) return null
+  const workspace = value as Partial<SavedActivity>
+  if (workspace.activityId !== activityId
+    || typeof workspace.savedAt !== 'string'
+    || typeof workspace.activeDocumentId !== 'string'
+    || !Array.isArray(workspace.documents)
+    || workspace.documents.length === 0
+    || !workspace.documents.every(isDocument)
+    || !workspace.documents.some((document) => document.id === workspace.activeDocumentId)) return null
+
+  return { ...workspace, attemptId: 'attempto-local-legado' } as SavedActivity
 }
 
 export function loadSavedActivity(activity: Activity): SavedActivity | null {
@@ -55,7 +71,9 @@ export function loadSavedActivity(activity: Activity): SavedActivity | null {
     if (!raw) return null
 
     const saved: unknown = JSON.parse(raw)
-    return isSavedActivity(saved, activity.id) ? saved : migrateLegacyActivity(saved, activity)
+    return isSavedActivity(saved, activity.id)
+      ? saved
+      : migrateWorkspaceWithoutAttempt(saved, activity.id) ?? migrateLegacyActivity(saved, activity)
   } catch {
     return null
   }
