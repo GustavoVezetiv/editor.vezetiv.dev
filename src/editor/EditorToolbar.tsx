@@ -6,6 +6,7 @@ interface EditorToolbarProps {
   editor: Editor | null
   enabledTools: EditorTool[]
   onFormatApplied?: (tool: EditorTool) => void
+  highlightedTool?: EditorTool | null
 }
 
 interface ToolbarButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -30,7 +31,7 @@ function Divider() {
   return <div className="toolbar-divider" />
 }
 
-export function EditorToolbar({ editor, enabledTools, onFormatApplied }: EditorToolbarProps) {
+export function EditorToolbar({ editor, enabledTools, onFormatApplied, highlightedTool }: EditorToolbarProps) {
   if (!editor) return <div className="editor-toolbar" aria-label="Barra de ferramentas" />
 
   const tools = new Set(enabledTools)
@@ -61,14 +62,14 @@ export function EditorToolbar({ editor, enabledTools, onFormatApplied }: EditorT
       {hasHistory && hasMarks && <Divider />}
 
       {hasMarks && <div className="toolbar-group">
-        {tools.has('bold') && <ToolbarButton label="Negrito (Ctrl+B)" active={editor.isActive('bold')} className="text-bold" onClick={() => { editor.chain().focus().toggleBold().run(); onFormatApplied?.('bold') }}>N</ToolbarButton>}
-        {tools.has('italic') && <ToolbarButton label="Itálico (Ctrl+I)" active={editor.isActive('italic')} className="text-italic" onClick={() => { editor.chain().focus().toggleItalic().run(); onFormatApplied?.('italic') }}>I</ToolbarButton>}
-        {tools.has('underline') && <ToolbarButton label="Sublinhado (Ctrl+U)" active={editor.isActive('underline')} className="text-underline" onClick={() => { editor.chain().focus().toggleUnderline().run(); onFormatApplied?.('underline') }}>S</ToolbarButton>}
+        {tools.has('bold') && <ToolbarButton label="Negrito (Ctrl+B)" active={editor.isActive('bold')} className={`text-bold ${highlightedTool === 'bold' ? 'is-hinted' : ''}`} onClick={() => { editor.chain().focus().toggleBold().run(); onFormatApplied?.('bold') }}>N</ToolbarButton>}
+        {tools.has('italic') && <ToolbarButton label="Itálico (Ctrl+I)" active={editor.isActive('italic')} className={`text-italic ${highlightedTool === 'italic' ? 'is-hinted' : ''}`} onClick={() => { editor.chain().focus().toggleItalic().run(); onFormatApplied?.('italic') }}>I</ToolbarButton>}
+        {tools.has('underline') && <ToolbarButton label="Sublinhado (Ctrl+U)" active={editor.isActive('underline')} className={`text-underline ${highlightedTool === 'underline' ? 'is-hinted' : ''}`} onClick={() => { editor.chain().focus().toggleUnderline().run(); onFormatApplied?.('underline') }}>S</ToolbarButton>}
       </div>}
 
       {(hasHistory || hasMarks) && hasTextControls && <Divider />}
 
-      {tools.has('heading') && <label className="select-control">
+      {tools.has('heading') && <label className={`select-control ${highlightedTool === 'heading' ? 'is-hinted' : ''}`}>
         <span className="sr-only">Estilo do texto</span>
         <select
           value={editor.isActive('heading', { level: 1 }) ? 'h1' : editor.isActive('heading', { level: 2 }) ? 'h2' : 'p'}
@@ -104,7 +105,7 @@ export function EditorToolbar({ editor, enabledTools, onFormatApplied }: EditorT
 
       {hasTextControls && tools.has('alignment') && <Divider />}
 
-      {tools.has('alignment') && <div className="toolbar-group alignment-group">
+      {tools.has('alignment') && <div className={`toolbar-group alignment-group ${highlightedTool === 'alignment' ? 'is-hinted' : ''}`}>
         <ToolbarButton label="Alinhar à esquerda" active={currentAlignment === 'left'} onClick={() => { editor.chain().focus().setTextAlign('left').run(); onFormatApplied?.('alignment') }}>≡</ToolbarButton>
         <ToolbarButton label="Centralizar" active={currentAlignment === 'center'} className="align-center" onClick={() => { editor.chain().focus().setTextAlign('center').run(); onFormatApplied?.('alignment') }}>≡</ToolbarButton>
         <ToolbarButton label="Alinhar à direita" active={currentAlignment === 'right'} className="align-right" onClick={() => { editor.chain().focus().setTextAlign('right').run(); onFormatApplied?.('alignment') }}>≡</ToolbarButton>
@@ -114,8 +115,8 @@ export function EditorToolbar({ editor, enabledTools, onFormatApplied }: EditorT
       {(hasHistory || hasMarks || hasTextControls || tools.has('alignment')) && hasLists && <Divider />}
 
       {hasLists && <div className="toolbar-group">
-        {tools.has('bulletList') && <ToolbarButton label="Lista com marcadores" active={editor.isActive('bulletList')} className="list-button" onClick={() => { editor.chain().focus().toggleBulletList().run(); onFormatApplied?.('bulletList') }}>•≡</ToolbarButton>}
-        {tools.has('orderedList') && <ToolbarButton label="Lista numerada" active={editor.isActive('orderedList')} className="list-button" onClick={() => { editor.chain().focus().toggleOrderedList().run(); onFormatApplied?.('orderedList') }}>1≡</ToolbarButton>}
+        {tools.has('bulletList') && <ToolbarButton label="Lista com marcadores" active={editor.isActive('bulletList')} className={`list-button ${highlightedTool === 'bulletList' ? 'is-hinted' : ''}`} onClick={() => { editor.chain().focus().toggleBulletList().run(); onFormatApplied?.('bulletList') }}>•≡</ToolbarButton>}
+        {tools.has('orderedList') && <ToolbarButton label="Lista numerada" active={editor.isActive('orderedList')} className={`list-button ${highlightedTool === 'orderedList' ? 'is-hinted' : ''}`} onClick={() => { editor.chain().focus().toggleOrderedList().run(); onFormatApplied?.('orderedList') }}>1≡</ToolbarButton>}
       </div>}
     </div>
   )

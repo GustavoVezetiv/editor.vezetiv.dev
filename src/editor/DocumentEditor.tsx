@@ -15,9 +15,10 @@ interface DocumentEditorProps {
   onDocumentChange: (content: JSONContent) => void
   onBlockedInput: () => void
   onFormatApplied?: (tool: EditorTool) => void
+  highlightedTool?: EditorTool | null
 }
 
-export function DocumentEditor({ initialContent, pastePolicy, enabledTools, preset, onDocumentChange, onBlockedInput, onFormatApplied }: DocumentEditorProps) {
+export function DocumentEditor({ initialContent, pastePolicy, enabledTools, preset, onDocumentChange, onBlockedInput, onFormatApplied, highlightedTool }: DocumentEditorProps) {
   const editor = useEditor({
     shouldRerenderOnTransaction: true,
     extensions: [
@@ -55,6 +56,12 @@ export function DocumentEditor({ initialContent, pastePolicy, enabledTools, pres
           onBlockedInput()
           return true
         }
+        const shortcutTools: Record<string, EditorTool> = { b: 'bold', i: 'italic', u: 'underline' }
+        const shortcutTool = (event.ctrlKey || event.metaKey) ? shortcutTools[event.key.toLowerCase()] : undefined
+        if (shortcutTool && !enabledTools.includes(shortcutTool)) {
+          event.preventDefault()
+          return true
+        }
         return false
       },
     },
@@ -63,7 +70,7 @@ export function DocumentEditor({ initialContent, pastePolicy, enabledTools, pres
 
   return (
     <section className="document-workspace" aria-label="Área de edição">
-      <EditorToolbar editor={editor} enabledTools={enabledTools} onFormatApplied={onFormatApplied} />
+      <EditorToolbar editor={editor} enabledTools={enabledTools} onFormatApplied={onFormatApplied} highlightedTool={highlightedTool} />
       <div className="page-stage">
         <div className={`document-page document-page--${preset}`}>
           <EditorContent editor={editor} />

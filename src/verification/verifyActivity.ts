@@ -7,7 +7,11 @@ export interface CheckResult {
   passed: boolean
   points: number
   detail?: string
+  feedback?: string
 }
+
+interface RequirementEvaluation { passed: boolean; detail?: string; feedback?: string }
+type RequirementHandler = (content: JSONContent, requirement: never, preset?: DocumentPreset) => RequirementEvaluation
 
 function getText(node: JSONContent): string {
   if (node.type === 'text') return node.text ?? ''
@@ -19,13 +23,14 @@ function walk(node: JSONContent, callback: (item: JSONContent) => void): void {
   node.content?.forEach((child) => walk(child, callback))
 }
 
+function findNode(content: JSONContent, predicate: (node: JSONContent) => boolean): JSONContent | undefined {
+  let found: JSONContent | undefined
+  walk(content, (node) => { if (!found && predicate(node)) found = node })
+  return found
+}
+
 export function normalizeText(value: string): string {
-  return value
-    .normalize('NFC')
-    .replace(/[\u200B-\u200D\uFEFF]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLocaleLowerCase('pt-BR')
+  return value.normalize('NFC').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('pt-BR')
 }
 
 export function textSimilarity(actual: string, expected: string): number {
@@ -37,11 +42,7 @@ export function textSimilarity(actual: string, expected: string): number {
   for (let sourceIndex = 1; sourceIndex <= source.length; sourceIndex += 1) {
     const current = [sourceIndex]
     for (let targetIndex = 1; targetIndex <= target.length; targetIndex += 1) {
-      current[targetIndex] = Math.min(
-        current[targetIndex - 1] + 1,
-        previous[targetIndex] + 1,
-        previous[targetIndex - 1] + (source[sourceIndex - 1] === target[targetIndex - 1] ? 0 : 1),
-      )
+      current[targetIndex] = Math.min(current[targetIndex - 1] + 1, previous[targetIndex] + 1, previous[targetIndex - 1] + (source[sourceIndex - 1] === target[targetIndex - 1] ? 0 : 1))
     }
     previous.splice(0, previous.length, ...current)
   }
@@ -53,65 +54,60 @@ function hasWholeWord(value: string, expected: string): boolean {
   return new RegExp(`(^|[^\\p{L}\\p{N}_])${escaped}(?=$|[^\\p{L}\\p{N}_])`, 'iu').test(normalizeText(value))
 }
 
-function textRequirementResult(content: JSONContent, requirement: Extract<ActivityRequirement, { type: 'text-content' }>): { passed: boolean; detail?: string } {
-  const actual = getText(content)
-  if (requirement.matchMode === 'exact') return { passed: actual.includes(requirement.text) }
-  if (requirement.matchMode === 'normalized') return { passed: normalizeText(actual).includes(normalizeText(requirement.text)) }
-  const similarity = textSimilarity(actual, requirement.text)
-  return { passed: similarity >= (requirement.similarityThreshold ?? 0.95), detail: `Texto: ${Math.round(similarity * 100)}% semelhante ao solicitado.` }
-}
-
-function passesRequirement(content: JSONContent, requirement: ActivityRequirement, preset?: DocumentPreset): boolean {
-  if (requirement.type === 'text-content') {
-    return textRequirementResult(content, requirement).passed
-  }
-
-  if (requirement.type === 'document-preset') return preset === requirement.preset
-  if (requirement.type === 'spelling') return false
-
-  if (requirement.type === 'heading') {
-    let matched = false
-    walk(content, (node) => {
-      matched ||= node.type === 'heading'
-        && node.attrs?.level === requirement.level
-        && normalizeText(getText(node)) === normalizeText(requirement.text)
-    })
-    return matched
-  }
-
-  if (requirement.type === 'alignment') {
-    let matched = false
-    walk(content, (node) => {
-      matched ||= (node.type === 'heading' || node.type === 'paragraph')
-        && normalizeText(getText(node)) === normalizeText(requirement.target)
-        && node.attrs?.textAlign === requirement.value
-    })
-    return matched
-  }
-
-  if (requirement.type === 'text-mark') {
-    let matched = false
+const handlers: Record<ActivityRequirement['type'], RequirementHandler> = {
+  'text-content': (content, rawRequirement) => {
+    const requirement = rawRequirement as Extract<ActivityRequirement, { type: 'text-content' }>
+    const actual = getText(content)
+    if (requirement.matchMode === 'exact') return { passed: actual.includes(requirement.text), feedback: 'Digite o texto solicitado e confira a escrita.' }
+    if (requirement.matchMode === 'normalized') return { passed: normalizeText(actual).includes(normalizeText(requirement.text)), feedback: 'O texto solicitado ainda não foi reconhecido. Revise se todas as palavras foram digitadas.' }
+    const similarity = textSimilarity(actual, requirement.text)
+    return { passed: similarity >= (requirement.similarityThreshold ?? 0.95), detail: `Texto: ${Math.round(similarity * 100)}% semelhante ao solicitado.`, feedback: 'Revise o texto para aproximá-lo do enunciado.' }
+  },
+  heading: (content, rawRequirement) => {
+    const requirement = rawRequirement as Extract<ActivityRequirement, { type: 'heading' }>
+    const matchingHeading = findNode(content, (node) => node.type === 'heading' && normalizeText(getText(node)) === normalizeText(requirement.text))
+    const matchingText = findNode(content, (node) => (node.type === 'heading' || node.type === 'paragraph') && normalizeText(getText(node)) === normalizeText(requirement.text))
+    return { passed: Boolean(matchingHeading?.attrs?.level === requirement.level), feedback: matchingText ? `O texto foi encontrado, mas ainda precisa usar o estilo Título ${requirement.level}.` : `Digite o título “${requirement.text}”.` }
+  },
+  alignment: (content, rawRequirement) => {
+    const requirement = rawRequirement as Extract<ActivityRequirement, { type: 'alignment' }>
+    const matchingText = findNode(content, (node) => (node.type === 'heading' || node.type === 'paragraph') && normalizeText(getText(node)) === normalizeText(requirement.target))
+    return { passed: Boolean(matchingText?.attrs?.textAlign === requirement.value), feedback: matchingText ? `O texto existe, mas ainda não está alinhado à ${requirement.value === 'center' ? 'centralização' : requirement.value}.` : `Primeiro localize ou digite “${requirement.target}”.` }
+  },
+  'text-mark': (content, rawRequirement) => {
+    const requirement = rawRequirement as Extract<ActivityRequirement, { type: 'text-mark' }>
+    let foundText = false
+    let passed = false
     walk(content, (node) => {
       if (node.type !== 'text' || !hasWholeWord(node.text ?? '', requirement.text)) return
-      matched ||= node.marks?.some((mark) => mark.type === requirement.mark) ?? false
+      foundText = true
+      passed ||= node.marks?.some((mark) => mark.type === requirement.mark) ?? false
     })
-    return matched
-  }
-
-  let matched = false
-  walk(content, (node) => {
-    matched ||= node.type === (requirement.type === 'ordered-list' ? 'orderedList' : 'bulletList')
-      && (node.content?.filter((item) => item.type === 'listItem').length ?? 0) >= requirement.minItems
-  })
-  return matched
+    const markLabel = requirement.mark === 'bold' ? 'negrito' : requirement.mark === 'italic' ? 'itálico' : 'sublinhado'
+    return { passed, feedback: foundText ? `A palavra foi encontrada, mas ainda não está em ${markLabel}.` : `Digite a palavra “${requirement.text}” antes de aplicar ${markLabel}.` }
+  },
+  'ordered-list': (content, rawRequirement) => {
+    const requirement = rawRequirement as Extract<ActivityRequirement, { type: 'ordered-list' }>
+    const list = findNode(content, (node) => node.type === 'orderedList')
+    const count = list?.content?.filter((item) => item.type === 'listItem').length ?? 0
+    return { passed: count >= requirement.minItems, detail: `${count} de ${requirement.minItems} itens encontrados.`, feedback: count ? `A lista ainda precisa de ${requirement.minItems - count} item(ns).` : 'Use a ferramenta de lista numerada; uma numeração digitada manualmente não conta.' }
+  },
+  'bullet-list': (content, rawRequirement) => {
+    const requirement = rawRequirement as Extract<ActivityRequirement, { type: 'bullet-list' }>
+    const list = findNode(content, (node) => node.type === 'bulletList')
+    const count = list?.content?.filter((item) => item.type === 'listItem').length ?? 0
+    return { passed: count >= requirement.minItems, detail: `${count} de ${requirement.minItems} itens encontrados.`, feedback: count ? `A lista ainda precisa de ${requirement.minItems - count} item(ns).` : 'Use a ferramenta de lista com marcadores, em vez de digitar símbolos manualmente.' }
+  },
+  'document-preset': (_content, rawRequirement, preset) => {
+    const requirement = rawRequirement as Extract<ActivityRequirement, { type: 'document-preset' }>
+    return { passed: preset === requirement.preset, feedback: `Selecione o padrão ${requirement.preset === 'normal' ? 'Normal' : 'Acadêmico (ABNT)'} no menu do documento.` }
+  },
+  spelling: () => ({ passed: false, feedback: 'A verificação ortográfica automática ainda não está configurada para esta atividade.' }),
 }
 
 export function verifyActivity(content: JSONContent, activity: Activity, preset?: DocumentPreset): CheckResult[] {
-  return activity.requirements.map((requirement) => ({
-    id: requirement.id,
-    label: requirement.label,
-    passed: passesRequirement(content, requirement, preset),
-    points: requirement.points,
-    detail: requirement.type === 'text-content' ? textRequirementResult(content, requirement).detail : undefined,
-  }))
+  return activity.requirements.map((requirement) => {
+    const evaluation = handlers[requirement.type](content, requirement as never, preset)
+    return { id: requirement.id, label: requirement.label, points: requirement.points, ...evaluation }
+  })
 }

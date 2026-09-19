@@ -143,3 +143,10 @@ test('reconhece listas com marcadores e preset como requisitos estruturais', () 
   const result = Object.fromEntries(verifyActivity(content, activity, 'normal').map((check) => [check.id, check.passed]))
   assert.deepEqual(result, { bullet: true, preset: true })
 })
+
+test('explica quando o título existe mas ainda não usa o estilo solicitado', () => {
+  const content: JSONContent = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Preservação Ambiental' }] }] }
+  const title = verifyActivity(content, activity01).find((result) => result.id === 'title')
+  assert.equal(title?.passed, false)
+  assert.match(title?.feedback ?? '', /Título 1/)
+})

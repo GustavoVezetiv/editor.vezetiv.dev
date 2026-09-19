@@ -114,4 +114,31 @@ export const activity02: Activity = {
   isFeatured: false,
 }
 
-export const builtInActivities = [activity01, activity02]
+export const activity03: Activity = {
+  id: 'atividade-03-documento-academico',
+  slug: 'documento-academico',
+  title: 'Atividade 03 — Documento acadêmico',
+  description: 'Organize um pequeno documento usando título, parágrafo e lista.',
+  instructions: ['Crie o título solicitado.', 'Digite o parágrafo-base.', 'Inclua uma lista numerada com três etapas.'],
+  sourceText: 'Uma boa pesquisa começa com uma pergunta clara, fontes confiáveis e registro das referências.',
+  initialContent: { type: 'doc', content: [{ type: 'paragraph' }] },
+  enabledTools: ['undo', 'redo', 'bold', 'heading', 'alignment', 'orderedList'],
+  pastePolicy: 'blocked',
+  verificationMode: 'manual',
+  defaultDocumentPreset: 'academic-abnt',
+  requirements: [
+    { id: 'title', type: 'heading', level: 1, text: 'Pesquisa responsável', points: 30, label: 'Título principal criado', objective: 'Criar o título “Pesquisa responsável” como Título 1.' },
+    { id: 'source-text', type: 'text-content', text: 'Uma boa pesquisa começa com uma pergunta clara, fontes confiáveis e registro das referências.', matchMode: 'normalized', points: 35, label: 'Parágrafo solicitado digitado', objective: 'Digitar o parágrafo-base.' },
+    { id: 'list', type: 'ordered-list', minItems: 3, points: 35, label: 'Lista numerada com três etapas', objective: 'Criar uma lista numerada com três etapas.' },
+  ],
+  hints: [
+    { requirementId: 'title', title: 'Como estruturar o título?', steps: ['Digite o texto solicitado.', 'Posicione o cursor no título.', 'Escolha “Título 1” na barra de ferramentas.'] },
+    { requirementId: 'source-text', title: 'Como inserir o parágrafo?', steps: ['Leia o texto-base.', 'Digite-o no documento.', 'Use “Verificar atividade” para conferir.'] },
+    { requirementId: 'list', title: 'Como criar as etapas?', steps: ['Posicione o cursor em uma nova linha.', 'Ative a lista numerada.', 'Digite três etapas, separando-as com Enter.'] },
+  ],
+  scoring: { totalPoints: 100 },
+  status: 'published',
+  isFeatured: false,
+}
+
+export const builtInActivities = [activity01, activity02, activity03]

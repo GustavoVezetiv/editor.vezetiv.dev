@@ -35,5 +35,7 @@ export function createPedagogicalEvent(
 
 // Deliberately isolated from localStorage: event persistence belongs to the future backend.
 export function logPedagogicalEvent(event: PedagogicalEvent): void {
-  console.info('[evento pedagógico]', event)
+  // Events are persisted with the attempt. Keeping this boundary avoids noisy browser logs
+  // and leaves room for an explicit observability adapter later.
+  void event
 }
