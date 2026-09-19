@@ -14,9 +14,10 @@ interface DocumentEditorProps {
   preset: DocumentPreset
   onDocumentChange: (content: JSONContent) => void
   onBlockedInput: () => void
+  onFormatApplied?: (tool: EditorTool) => void
 }
 
-export function DocumentEditor({ initialContent, pastePolicy, enabledTools, preset, onDocumentChange, onBlockedInput }: DocumentEditorProps) {
+export function DocumentEditor({ initialContent, pastePolicy, enabledTools, preset, onDocumentChange, onBlockedInput, onFormatApplied }: DocumentEditorProps) {
   const editor = useEditor({
     shouldRerenderOnTransaction: true,
     extensions: [
@@ -62,7 +63,7 @@ export function DocumentEditor({ initialContent, pastePolicy, enabledTools, pres
 
   return (
     <section className="document-workspace" aria-label="Área de edição">
-      <EditorToolbar editor={editor} enabledTools={enabledTools} />
+      <EditorToolbar editor={editor} enabledTools={enabledTools} onFormatApplied={onFormatApplied} />
       <div className="page-stage">
         <div className={`document-page document-page--${preset}`}>
           <EditorContent editor={editor} />

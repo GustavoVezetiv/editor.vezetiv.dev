@@ -1,9 +1,13 @@
 export type PedagogicalEventType =
   | 'activity_started'
   | 'paste_blocked'
+  | 'document_created'
+  | 'document_renamed'
+  | 'document_deleted'
   | 'format_applied'
   | 'hint_opened'
   | 'verification_requested'
+  | 'verification_completed'
   | 'requirement_passed'
   | 'activity_completed'
   | 'preset_changed'

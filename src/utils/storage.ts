@@ -44,7 +44,7 @@ function migrateLegacyActivity(value: unknown, activity: Activity): SavedActivit
       id: 'documento-1',
       name: 'Documento 1',
       content: legacy.content as JSONContent,
-      preset: activity.documentPreset,
+      preset: activity.defaultDocumentPreset,
       updatedAt: legacy.savedAt,
     }],
     savedAt: legacy.savedAt,

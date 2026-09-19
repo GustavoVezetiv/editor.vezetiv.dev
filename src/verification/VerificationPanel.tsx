@@ -43,7 +43,7 @@ export function VerificationPanel({ activity, mode, results, hasUnverifiedChange
                 <li className={result.passed ? 'passed' : 'pending'} key={result.id}>
                   <span aria-hidden="true">{result.passed ? '✓' : '×'}</span>
                   <div>
-                    <span>{result.label} <small>({result.points} pontos)</small></span>
+                    <span>{result.label} <small>({result.points} pontos)</small>{result.detail && <small>{result.detail}</small>}</span>
                     {!result.passed && hint && (
                       <>
                         <button className="hint-button" type="button" aria-expanded={isHintOpen} onClick={() => toggleHint(result.id)}>

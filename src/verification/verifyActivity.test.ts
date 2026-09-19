@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { JSONContent } from '@tiptap/core'
 import { activity01 } from '../config/activity01'
-import { verifyActivity } from './verifyActivity'
+import { textSimilarity, verifyActivity } from './verifyActivity'
 
 function resultsFor(content: JSONContent): Record<string, boolean> {
   return Object.fromEntries(verifyActivity(content, activity01).map((result) => [result.id, result.passed]))
@@ -124,4 +124,22 @@ test('mantém o requisito de negrito quando outra ocorrência não está em negr
   }
 
   assert.equal(resultsFor(multipleOccurrences).bold, true)
+})
+
+test('calcula similaridade local e determinística para texto solicitado', () => {
+  assert.equal(textSimilarity('Texto de teste', 'Texto de teste'), 1)
+  assert.ok(textSimilarity('Este é um texto suficientemente longo para validar pequenas diferenças de pontuação.', 'Este é um texto suficientemente longo para validar pequenas diferenças de pontuação') > 0.95)
+})
+
+test('reconhece listas com marcadores e preset como requisitos estruturais', () => {
+  const activity = {
+    ...activity01,
+    requirements: [
+      { id: 'bullet', type: 'bullet-list' as const, minItems: 2, points: 50, label: 'Marcadores', objective: 'Criar marcadores.' },
+      { id: 'preset', type: 'document-preset' as const, preset: 'normal' as const, points: 50, label: 'Preset normal', objective: 'Usar Normal.' },
+    ],
+  }
+  const content: JSONContent = { type: 'doc', content: [{ type: 'bulletList', content: [listItem('Um'), listItem('Dois')] }] }
+  const result = Object.fromEntries(verifyActivity(content, activity, 'normal').map((check) => [check.id, check.passed]))
+  assert.deepEqual(result, { bullet: true, preset: true })
 })
