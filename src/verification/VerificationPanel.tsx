@@ -11,9 +11,10 @@ interface VerificationPanelProps {
   onVerify: () => void
   onHintOpened: (requirementId: string) => void
   onHintChanged?: (requirementId: string | null) => void
+  readOnly?: boolean
 }
 
-export function VerificationPanel({ activity, mode, results, hasUnverifiedChanges, onVerify, onHintOpened, onHintChanged }: VerificationPanelProps) {
+export function VerificationPanel({ activity, mode, results, hasUnverifiedChanges, onVerify, onHintOpened, onHintChanged, readOnly = false }: VerificationPanelProps) {
   const [openHintId, setOpenHintId] = useState<string | null>(null)
   const completed = results?.filter((result) => result.passed).length ?? 0
   const score = results ? calculateScore(activity, results) : null
@@ -31,9 +32,9 @@ export function VerificationPanel({ activity, mode, results, hasUnverifiedChange
         <h2 id="verification-title">Verificação</h2>
         <p>{mode === 'manual' ? 'Leia, execute e verifique quando estiver pronto.' : 'Atualizado automaticamente conforme você edita.'}</p>
       </div>
-      {mode === 'manual' && <button className="verify-button" type="button" onClick={onVerify}>Verificar atividade</button>}
+      {mode === 'manual' && <button className="verify-button" type="button" onClick={onVerify} disabled={readOnly}>Verificar atividade</button>}
       {hasUnverifiedChanges && results && <p className="verification-pending" role="status">O documento foi alterado. Verifique novamente.</p>}
-      {results && (
+      {results && results.length > 0 && (
         <div className="check-results" aria-live="polite">
           <p className="check-summary">{completed} de {results.length} requisitos concluídos</p>
           {score && <p className="score-summary">{score.earnedPoints} / {score.totalPoints} pontos</p>}

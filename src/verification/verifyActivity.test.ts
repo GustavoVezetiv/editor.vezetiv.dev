@@ -150,3 +150,26 @@ test('explica quando o título existe mas ainda não usa o estilo solicitado', (
   assert.equal(title?.passed, false)
   assert.match(title?.feedback ?? '', /Título 1/)
 })
+
+test('compara similaridade com o melhor parágrafo dentro de um documento maior', () => {
+  const activity = { ...activity01, requirements: [{ id: 'text', type: 'text-content' as const, text: 'O planejamento ajuda a organizar ideias antes de escrever.', matchMode: 'similarity' as const, similarityThreshold: 0.95, points: 100, label: 'Texto', objective: 'Digitar texto.' }] }
+  const content: JSONContent = { type: 'doc', content: [
+    { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Meu documento' }] },
+    { type: 'paragraph', content: [{ type: 'text', text: 'O planejamento ajuda a organizar ideias antes de escrever.' }] },
+    { type: 'orderedList', content: [listItem('Planejar'), listItem('Escrever'), listItem('Revisar')] },
+  ] }
+  assert.equal(verifyActivity(content, activity)[0].passed, true)
+})
+
+test('aceita qualquer heading, alinhamento e lista que satisfaça o requisito', () => {
+  const content: JSONContent = { type: 'doc', content: [
+    { type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'Preservação Ambiental' }] },
+    { type: 'heading', attrs: { level: 1, textAlign: 'center' }, content: [{ type: 'text', text: 'Preservação Ambiental' }] },
+    { type: 'orderedList', content: [listItem('Um'), listItem('Dois')] },
+    { type: 'orderedList', content: [listItem('Um'), listItem('Dois'), listItem('Três')] },
+  ] }
+  const result = resultsFor(content)
+  assert.equal(result.title, true)
+  assert.equal(result.alignment, true)
+  assert.equal(result.list, true)
+})

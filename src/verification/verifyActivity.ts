@@ -29,6 +29,12 @@ function findNode(content: JSONContent, predicate: (node: JSONContent) => boolea
   return found
 }
 
+function findNodes(content: JSONContent, predicate: (node: JSONContent) => boolean): JSONContent[] {
+  const found: JSONContent[] = []
+  walk(content, (node) => { if (predicate(node)) found.push(node) })
+  return found
+}
+
 export function normalizeText(value: string): string {
   return value.normalize('NFC').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('pt-BR')
 }
@@ -57,22 +63,22 @@ function hasWholeWord(value: string, expected: string): boolean {
 const handlers: Record<ActivityRequirement['type'], RequirementHandler> = {
   'text-content': (content, rawRequirement) => {
     const requirement = rawRequirement as Extract<ActivityRequirement, { type: 'text-content' }>
-    const actual = getText(content)
-    if (requirement.matchMode === 'exact') return { passed: actual.includes(requirement.text), feedback: 'Digite o texto solicitado e confira a escrita.' }
-    if (requirement.matchMode === 'normalized') return { passed: normalizeText(actual).includes(normalizeText(requirement.text)), feedback: 'O texto solicitado ainda não foi reconhecido. Revise se todas as palavras foram digitadas.' }
-    const similarity = textSimilarity(actual, requirement.text)
+    const candidates = findNodes(content, (node) => node.type === 'paragraph' || node.type === 'heading').map(getText).filter(Boolean)
+    if (requirement.matchMode === 'exact') return { passed: candidates.some((candidate) => candidate.includes(requirement.text)), feedback: 'Digite o texto solicitado e confira a escrita.' }
+    if (requirement.matchMode === 'normalized') return { passed: candidates.some((candidate) => normalizeText(candidate).includes(normalizeText(requirement.text))), feedback: 'O texto solicitado ainda não foi reconhecido. Revise se todas as palavras foram digitadas.' }
+    const similarity = candidates.reduce((best, candidate) => Math.max(best, textSimilarity(candidate, requirement.text)), 0)
     return { passed: similarity >= (requirement.similarityThreshold ?? 0.95), detail: `Texto: ${Math.round(similarity * 100)}% semelhante ao solicitado.`, feedback: 'Revise o texto para aproximá-lo do enunciado.' }
   },
   heading: (content, rawRequirement) => {
     const requirement = rawRequirement as Extract<ActivityRequirement, { type: 'heading' }>
-    const matchingHeading = findNode(content, (node) => node.type === 'heading' && normalizeText(getText(node)) === normalizeText(requirement.text))
+    const matchingHeading = findNode(content, (node) => node.type === 'heading' && node.attrs?.level === requirement.level && normalizeText(getText(node)) === normalizeText(requirement.text))
     const matchingText = findNode(content, (node) => (node.type === 'heading' || node.type === 'paragraph') && normalizeText(getText(node)) === normalizeText(requirement.text))
-    return { passed: Boolean(matchingHeading?.attrs?.level === requirement.level), feedback: matchingText ? `O texto foi encontrado, mas ainda precisa usar o estilo Título ${requirement.level}.` : `Digite o título “${requirement.text}”.` }
+    return { passed: Boolean(matchingHeading), feedback: matchingText ? `O texto foi encontrado, mas ainda precisa usar o estilo Título ${requirement.level}.` : `Digite o título “${requirement.text}”.` }
   },
   alignment: (content, rawRequirement) => {
     const requirement = rawRequirement as Extract<ActivityRequirement, { type: 'alignment' }>
-    const matchingText = findNode(content, (node) => (node.type === 'heading' || node.type === 'paragraph') && normalizeText(getText(node)) === normalizeText(requirement.target))
-    return { passed: Boolean(matchingText?.attrs?.textAlign === requirement.value), feedback: matchingText ? `O texto existe, mas ainda não está alinhado à ${requirement.value === 'center' ? 'centralização' : requirement.value}.` : `Primeiro localize ou digite “${requirement.target}”.` }
+    const matchingTexts = findNodes(content, (node) => (node.type === 'heading' || node.type === 'paragraph') && normalizeText(getText(node)) === normalizeText(requirement.target))
+    return { passed: matchingTexts.some((node) => node.attrs?.textAlign === requirement.value), feedback: matchingTexts.length ? `O texto existe, mas ainda não está alinhado à ${requirement.value === 'center' ? 'centralização' : requirement.value}.` : `Primeiro localize ou digite “${requirement.target}”.` }
   },
   'text-mark': (content, rawRequirement) => {
     const requirement = rawRequirement as Extract<ActivityRequirement, { type: 'text-mark' }>
@@ -88,14 +94,12 @@ const handlers: Record<ActivityRequirement['type'], RequirementHandler> = {
   },
   'ordered-list': (content, rawRequirement) => {
     const requirement = rawRequirement as Extract<ActivityRequirement, { type: 'ordered-list' }>
-    const list = findNode(content, (node) => node.type === 'orderedList')
-    const count = list?.content?.filter((item) => item.type === 'listItem').length ?? 0
+    const count = findNodes(content, (node) => node.type === 'orderedList').reduce((best, list) => Math.max(best, list.content?.filter((item) => item.type === 'listItem').length ?? 0), 0)
     return { passed: count >= requirement.minItems, detail: `${count} de ${requirement.minItems} itens encontrados.`, feedback: count ? `A lista ainda precisa de ${requirement.minItems - count} item(ns).` : 'Use a ferramenta de lista numerada; uma numeração digitada manualmente não conta.' }
   },
   'bullet-list': (content, rawRequirement) => {
     const requirement = rawRequirement as Extract<ActivityRequirement, { type: 'bullet-list' }>
-    const list = findNode(content, (node) => node.type === 'bulletList')
-    const count = list?.content?.filter((item) => item.type === 'listItem').length ?? 0
+    const count = findNodes(content, (node) => node.type === 'bulletList').reduce((best, list) => Math.max(best, list.content?.filter((item) => item.type === 'listItem').length ?? 0), 0)
     return { passed: count >= requirement.minItems, detail: `${count} de ${requirement.minItems} itens encontrados.`, feedback: count ? `A lista ainda precisa de ${requirement.minItems - count} item(ns).` : 'Use a ferramenta de lista com marcadores, em vez de digitar símbolos manualmente.' }
   },
   'document-preset': (_content, rawRequirement, preset) => {

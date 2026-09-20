@@ -20,6 +20,16 @@ export interface Student {
   createdAt: string
 }
 
+export interface ClassActivity {
+  id: string
+  classId: string
+  activityId: string
+  isFeatured: boolean
+  availableFrom?: string
+  availableUntil?: string
+  createdAt: string
+}
+
 export interface VerificationRun {
   id: string
   attemptId: string
@@ -36,6 +46,7 @@ export interface ActivityAttempt {
   startedAt: string
   completedAt?: string
   currentScore: number
+  scoreReachedAt?: string
   status: AttemptStatus
   documents: ActivityDocument[]
   activeDocumentId: string
@@ -55,6 +66,7 @@ export interface TeacherDashboard {
   classes: Classroom[]
   students: Student[]
   activities: Activity[]
+  classActivities: ClassActivity[]
   attempts: ActivityAttempt[]
   averageScore: number
   completedAttempts: number

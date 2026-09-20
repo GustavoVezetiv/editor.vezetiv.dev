@@ -13,10 +13,10 @@ Abra `/join`, informe `DEMO` como código da turma e uma identificação própri
 
 ## Arquitetura
 
-- `Activity`: configuração reutilizável com slug, disponibilidade, destaque semanal, ferramentas, política de colagem, preset, requirements, dicas e pontuação.
+- `Activity`: configuração reutilizável com ferramentas, política de colagem, preset, requirements, dicas e pontuação. Disponibilidade e destaque pertencem a `ClassActivity`, portanto são específicos de cada turma.
 - Engine de verificação: um registro de handlers avalia nós reais do Tiptap (heading, alinhamento, marcas, listas, preset e conteúdo de texto) e retorna feedback acionável. Lista digitada manualmente não passa como `orderedList`/`bulletList`.
 - `ActivityAttempt`: isola documentos, verificações, score e eventos de cada aluno por atividade.
-- Repositório local: permite o fluxo completo sem Supabase; cada alteração é salva localmente antes da sincronização opcional, que informa estado de retry sem perder o trabalho.
+- Repositories separados: `LocalPlatformRepository` atende a demonstração; `SupabasePlatformRepository` é a fonte de verdade quando existe sessão Supabase autenticada. A fachada escolhe uma implementação, sem combinar leituras locais e remotas.
 - Professor: `/teacher` apresenta painel, tentativas, score, verificações, documento e timeline de eventos.
 
 ## Atividades, dicas e score
@@ -34,9 +34,9 @@ VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
 ```
 
-A migração inicial está em [supabase/migrations/20260919000000_learning_platform.sql](supabase/migrations/20260919000000_learning_platform.sql) e os índices incrementais em [supabase/migrations/20260919010000_add_learning_indexes.sql](supabase/migrations/20260919010000_add_learning_indexes.sql). Elas definem classes, alunos, atividades, tentativas, documentos, verificações e eventos, com RLS habilitado.
+A migração inicial está em [supabase/migrations/20260919000000_learning_platform.sql](supabase/migrations/20260919000000_learning_platform.sql). As migrações seguintes adicionam índices e `class_activities`, estado remoto da tentativa e políticas por turma. Todas as tabelas expostas têm RLS habilitado e grants explícitos.
 
-Ainda não há autenticação Supabase no frontend. Portanto, as políticas de professor ficam deliberadamente adiadas: não use o modo remoto para dados reais até conectar a identidade de aluno/professor a `auth.users` e revisar os grants e as políticas de docente.
+O frontend detecta uma sessão Supabase existente, mas ainda não oferece uma tela própria de login/cadastro. Sem sessão autenticada, a aplicação entra explicitamente em modo demo local. Para dados reais, a identidade de estudante/professor precisa ser provisionada em `auth.users` e relacionada às tabelas públicas.
 
 ## Testes
 

@@ -10,6 +10,7 @@ import { createPedagogicalEvent, logPedagogicalEvent, type PedagogicalEventType 
 import { calculateScore } from '../verification/scoring'
 import { verifyActivity } from '../verification/verifyActivity'
 import type { RemoteSaveState, SavedAttempt } from '../services/platformRepository'
+import { canEditAttempt, isDocumentDirty } from './attemptState'
 
 interface ActivityWorkspaceProps {
   activity: Activity
@@ -23,7 +24,6 @@ const hasContent = (document: ActivityDocument) => JSON.stringify(document.conte
 
 export function ActivityWorkspace({ activity, student, initialAttempt, onSaveAttempt, onBack }: ActivityWorkspaceProps) {
   const [attempt, setAttempt] = useState(initialAttempt)
-  const [dirty, setDirty] = useState<Record<string, boolean>>({})
   const [pasteNotice, setPasteNotice] = useState(false)
   const [exporting, setExporting] = useState<ExportFormat | null>(null)
   const [saveState, setSaveState] = useState<'saving' | RemoteSaveState>('local')
@@ -34,6 +34,7 @@ export function ActivityWorkspace({ activity, student, initialAttempt, onSaveAtt
   const saveRevision = useRef(0)
   const activeDocument = attempt.documents.find((document) => document.id === attempt.activeDocumentId) ?? attempt.documents[0]
   const latestRun = [...attempt.verificationRuns].reverse().find((run) => run.documentId === activeDocument.id)
+  const readOnly = !canEditAttempt(attempt)
 
   const persist = useCallback((next: ActivityAttempt, instant = false) => {
     attemptRef.current = next
@@ -63,10 +64,10 @@ export function ActivityWorkspace({ activity, student, initialAttempt, onSaveAtt
   }, [activity.id])
 
   const updateDocument = useCallback((content: JSONContent) => {
+    if (!canEditAttempt(attemptRef.current)) return
     const next = { ...attemptRef.current, documents: attemptRef.current.documents.map((document) => document.id === attemptRef.current.activeDocumentId ? { ...document, content, updatedAt: new Date().toISOString() } : document) }
     persist(next)
-    if (activity.verificationMode === 'manual') setDirty((current) => ({ ...current, [next.activeDocumentId]: true }))
-  }, [activity.verificationMode, persist])
+  }, [persist])
 
   const recordFormat = useCallback((tool: EditorTool) => {
     const next = withEvent(attemptRef.current, 'format_applied', attemptRef.current.activeDocumentId, { tool })
@@ -79,11 +80,10 @@ export function ActivityWorkspace({ activity, student, initialAttempt, onSaveAtt
     const results = verifyActivity(document.content, activity, document.preset)
     const score = calculateScore(activity, results)
     const run: VerificationRun = { id: `verification-${crypto.randomUUID()}`, attemptId: current.id, documentId: document.id, score: score.earnedPoints, results, createdAt: new Date().toISOString() }
-    let next = { ...current, currentScore: score.earnedPoints, verificationRuns: [...current.verificationRuns, run] }
+    let next: ActivityAttempt = { ...current, currentScore: score.earnedPoints, scoreReachedAt: current.currentScore === score.earnedPoints ? current.scoreReachedAt : run.createdAt, verificationRuns: [...current.verificationRuns, run] }
     next = withEvent(next, 'verification_requested', document.id)
     next = withEvent(next, 'verification_completed', document.id, { score: score.earnedPoints })
     persist(next, true)
-    setDirty((currentDirty) => ({ ...currentDirty, [document.id]: false }))
   }, [activity, persist, withEvent])
 
   const selectDocument = (documentId: string) => persist({ ...attemptRef.current, activeDocumentId: documentId })
@@ -132,6 +132,6 @@ export function ActivityWorkspace({ activity, student, initialAttempt, onSaveAtt
   const results = latestRun?.results ?? null
   const pending = results?.filter((result) => !result.passed) ?? activity.requirements
   const score = latestRun?.score ?? 0
-  const saveLabel = saveState === 'saving' ? 'Salvando…' : saveState === 'synced' ? 'Sincronizado' : saveState === 'retrying' ? 'Salvo localmente · nova tentativa pendente' : 'Salvo neste dispositivo'
-  return <main className="app-shell"><header className="app-header"><button className="link-button" onClick={onBack}>← Atividades</button><div className="header-activity">{activity.title}</div><div className={`save-status ${saveState === 'saving' ? 'saving' : saveState === 'retrying' ? 'failed' : ''}`}>{student.displayName} · {saveLabel}</div></header><div className="workbench"><ActivityPanel activity={activity} results={results} hasUnverifiedChanges={dirty[activeDocument.id] ?? false} onVerify={verify} onHintOpened={openHint} onHintChanged={(id) => setHighlightedTool(hintTool(id))} onComplete={complete} isCompleted={attempt.status === 'completed'} /><div className="editor-column"><DocumentTabs documents={attempt.documents} activeDocumentId={activeDocument.id} verificationMode={activity.verificationMode} onSelect={selectDocument} onCreate={createDocument} onRename={renameDocument} onClose={closeDocument} onPresetChange={setPreset} onExport={exportActive} exportingFormat={exporting} /><DocumentEditor key={activeDocument.id} initialContent={activeDocument.content} preset={activeDocument.preset} enabledTools={activity.enabledTools} pastePolicy={activity.pastePolicy} onDocumentChange={updateDocument} onBlockedInput={blockedPaste} onFormatApplied={recordFormat} highlightedTool={highlightedTool} /></div></div>{pasteNotice && <div className="paste-notice" role="status">A colagem está desativada nesta atividade. Digite o conteúdo utilizando o editor.</div>}{completionOpen && <div className="modal-backdrop" role="presentation"><section className="completion-modal" role="dialog" aria-modal="true" aria-labelledby="completion-title"><h2 id="completion-title">Concluir atividade?</h2><p>Você obteve <strong>{score} / {activity.scoring.totalPoints} pontos</strong>.</p>{!results && <p className="verification-pending">Faça uma verificação antes de concluir para receber o diagnóstico completo.</p>}{pending.length > 0 && <><h3>Pendências</h3><ul>{pending.map((result) => <li key={result.id}>{result.label}</li>)}</ul></>}<div className="modal-actions"><button className="link-button" onClick={() => setCompletionOpen(false)}>Continuar editando</button><button className="complete-button" onClick={confirmCompletion}>Concluir mesmo assim</button></div></section></div>}</main>
+  const saveLabel = saveState === 'saving' ? 'Salvando…' : saveState === 'synced' ? 'Sincronizado' : saveState === 'retrying' ? 'Salvo localmente · sincronização pendente' : saveState === 'blocked' ? 'Dependência remota ausente' : 'Salvo neste dispositivo'
+  return <main className="app-shell"><header className="app-header"><button className="link-button" onClick={onBack}>← Atividades</button><div className="header-activity">{activity.title}</div><div className={`save-status ${saveState === 'saving' ? 'saving' : saveState === 'retrying' || saveState === 'blocked' ? 'failed' : ''}`}>{student.displayName} · {saveLabel}</div></header><div className="workbench"><ActivityPanel activity={activity} results={results} hasUnverifiedChanges={isDocumentDirty(activeDocument, latestRun)} onVerify={verify} onHintOpened={openHint} onHintChanged={(id) => setHighlightedTool(hintTool(id))} onComplete={complete} isCompleted={readOnly} /><div className="editor-column"><DocumentTabs documents={attempt.documents} activeDocumentId={activeDocument.id} verificationMode={activity.verificationMode} onSelect={selectDocument} onCreate={createDocument} onRename={renameDocument} onClose={closeDocument} onPresetChange={setPreset} onExport={exportActive} exportingFormat={exporting} readOnly={readOnly} /><DocumentEditor key={activeDocument.id} initialContent={activeDocument.content} preset={activeDocument.preset} enabledTools={activity.enabledTools} pastePolicy={activity.pastePolicy} onDocumentChange={updateDocument} onBlockedInput={blockedPaste} onFormatApplied={recordFormat} highlightedTool={highlightedTool} readOnly={readOnly} /></div></div>{pasteNotice && <div className="paste-notice" role="status">A colagem está desativada nesta atividade. Digite o conteúdo utilizando o editor.</div>}{completionOpen && <div className="modal-backdrop" role="presentation"><section className="completion-modal" role="dialog" aria-modal="true" aria-labelledby="completion-title"><h2 id="completion-title">Concluir atividade?</h2><p>Você obteve <strong>{score} / {activity.scoring.totalPoints} pontos</strong>.</p>{!results && <p className="verification-pending">Faça uma verificação antes de concluir para receber o diagnóstico completo.</p>}{pending.length > 0 && <><h3>Pendências</h3><ul>{pending.map((result) => <li key={result.id}>{result.label}</li>)}</ul></>}<div className="modal-actions"><button className="link-button" onClick={() => setCompletionOpen(false)}>Continuar editando</button><button className="complete-button" onClick={confirmCompletion}>Concluir mesmo assim</button></div></section></div>}</main>
 }

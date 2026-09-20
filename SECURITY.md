@@ -10,7 +10,7 @@ O cliente só lê `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`; nenhuma chave 
 
 As migrações habilitam RLS em todas as tabelas públicas e associam acesso de estudante ao `auth.uid()` por `students.auth_user_id`. A migração incremental `20260919010000_add_learning_indexes.sql` apenas acrescenta índices; ela não reescreve a migração inicial.
 
-O frontend ainda não implementa autenticação Supabase nem papel de professor. Por essa razão, o modo remoto não está homologado para dados reais: uma equipe deve conectar uma identidade autenticada, revisar grants do Data API e criar políticas específicas de professor antes de ativá-lo em produção.
+O frontend utiliza o repository remoto apenas quando o cliente já possui uma sessão Supabase autenticada. As políticas relacionam estudantes por `auth_user_id` e professores por `classes.teacher_id`; atividades, ranking e acompanhamento são limitados à turma. O app ainda não oferece uma tela de autenticação/provisionamento, portanto esse fluxo precisa ser conectado antes da homologação com usuários reais.
 
 ## Checklist antes de produção
 

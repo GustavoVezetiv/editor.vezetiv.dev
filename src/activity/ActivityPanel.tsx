@@ -46,6 +46,7 @@ export function ActivityPanel({ activity, results, hasUnverifiedChanges, onVerif
         activity={activity}
         onHintOpened={onHintOpened}
         onHintChanged={onHintChanged}
+        readOnly={isCompleted}
       />
       <button className="complete-button" type="button" onClick={onComplete} disabled={isCompleted}>
         {isCompleted ? 'Atividade concluída' : 'Concluir atividade'}

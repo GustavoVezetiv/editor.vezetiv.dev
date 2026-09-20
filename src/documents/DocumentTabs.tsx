@@ -11,6 +11,7 @@ interface DocumentTabsProps {
   onPresetChange: (preset: DocumentPreset) => void
   onExport: (format: 'docx' | 'pdf') => void
   exportingFormat: 'docx' | 'pdf' | null
+  readOnly?: boolean
 }
 
 export function DocumentTabs({
@@ -24,6 +25,7 @@ export function DocumentTabs({
   onPresetChange,
   onExport,
   exportingFormat,
+  readOnly = false,
 }: DocumentTabsProps) {
   const activeDocument = documents.find((document) => document.id === activeDocumentId) ?? documents[0]
 
@@ -41,7 +43,7 @@ export function DocumentTabs({
             >
               {document.name}
             </button>
-            {document.id === activeDocumentId && (
+            {document.id === activeDocumentId && !readOnly && (
               <span className="tab-actions">
                 <button type="button" className="tab-icon-button" aria-label="Renomear documento" title="Renomear documento" onClick={() => onRename(document.id)}>✎</button>
                 <button type="button" className="tab-icon-button" aria-label="Fechar documento" title="Fechar documento" onClick={() => onClose(document.id)}>×</button>
@@ -49,13 +51,13 @@ export function DocumentTabs({
             )}
           </div>
         ))}
-        <button className="new-document-button" type="button" aria-label="Novo documento" title="Novo documento" onClick={onCreate}>+</button>
+        {!readOnly && <button className="new-document-button" type="button" aria-label="Novo documento" title="Novo documento" onClick={onCreate}>+</button>}
       </div>
 
       <div className="document-control-actions">
         <label className="preset-control">
           <span>Formato</span>
-          <select value={activeDocument.preset} onChange={(event) => onPresetChange(event.target.value as DocumentPreset)} aria-label="Preset do documento">
+          <select value={activeDocument.preset} onChange={(event) => onPresetChange(event.target.value as DocumentPreset)} aria-label="Preset do documento" disabled={readOnly}>
             <option value="academic-abnt">Acadêmico (ABNT)</option>
             <option value="normal">Normal</option>
           </select>

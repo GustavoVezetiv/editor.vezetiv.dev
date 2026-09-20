@@ -8,9 +8,10 @@ flowchart LR
   W --> E[Editor Tiptap]
   W --> V[Engine de requisitos]
   V --> R[Resultado, feedback e score]
-  W --> L[Repositório local / localStorage]
-  L --> P[Camada de sincronização]
-  P -. configurado e autenticado .-> DB[(Supabase)]
+  W --> F[Fachada de repository]
+  F -->|demo| L[LocalPlatformRepository]
+  F -->|sessão autenticada| P[SupabasePlatformRepository]
+  P --> DB[(Supabase)]
   T[Professor] --> D[/teacher]
   D --> L
 ```
@@ -21,12 +22,13 @@ flowchart LR
 - `src/config`: atividades publicadas de referência.
 - `src/verification`: registro de handlers por tipo de requisito; cada handler retorna aprovação, detalhe e feedback.
 - `src/activity` e `src/editor`: interação do estudante e persistência com debounce.
-- `src/services/localPlatformRepository.ts`: fonte local de verdade, dados demo e ranking determinístico.
-- `src/services/platformRepository.ts`: grava local primeiro e sincroniza de forma assíncrona quando Supabase estiver configurado.
+- `src/services/localPlatformRepository.ts`: fonte de verdade somente do modo demo, dados seed e ranking determinístico por turma.
+- `src/services/supabasePlatformRepository.ts`: leituras e gravações remotas, dependências ordenadas e outbox limitada.
+- `src/services/platformRepository.ts`: contrato e seleção da implementação de acordo com a sessão.
 
 ## Persistência e falhas
 
-O navegador recebe a gravação local antes da sincronização. A interface mostra “Salvando”, “Sincronizado”, “Salvo neste dispositivo” ou “nova tentativa pendente”. Assim, uma falha de rede não descarta o documento; ela apenas mantém a cópia remota pendente para a próxima gravação.
+No modo Supabase, o banco remoto é a fonte de verdade. Uma gravação que falha entra em uma outbox local limitada, retomada na inicialização e no próximo save. Dependências ausentes são marcadas como bloqueio e não entram em retry infinito. No modo demo, o `localStorage` continua sendo a fonte de verdade.
 
 ## Rotas
 
