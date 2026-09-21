@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core'
 
 export type PastePolicy = 'blocked' | 'allowed'
-export type VerificationMode = 'manual' | 'live'
+export type VerificationMode = 'manual'
 export type DocumentPreset = 'academic-abnt' | 'normal'
 export type ActivityStatus = 'draft' | 'published' | 'archived'
 

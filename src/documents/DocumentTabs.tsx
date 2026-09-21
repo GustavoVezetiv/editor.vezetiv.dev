@@ -1,9 +1,8 @@
-import type { ActivityDocument, DocumentPreset, VerificationMode } from '../types/activity'
+import type { ActivityDocument, DocumentPreset } from '../types/activity'
 
 interface DocumentTabsProps {
   documents: ActivityDocument[]
   activeDocumentId: string
-  verificationMode: VerificationMode
   onSelect: (documentId: string) => void
   onCreate: () => void
   onRename: (documentId: string) => void
@@ -17,7 +16,6 @@ interface DocumentTabsProps {
 export function DocumentTabs({
   documents,
   activeDocumentId,
-  verificationMode,
   onSelect,
   onCreate,
   onRename,
@@ -74,7 +72,7 @@ export function DocumentTabs({
             </button>
           </div>
         </details>
-        <span className="verification-mode-label">Verificação {verificationMode === 'manual' ? 'manual' : 'ao vivo'}</span>
+        <span className="verification-mode-label">Verificação manual</span>
       </div>
     </div>
   )

@@ -4,12 +4,12 @@ const slugify = (value: string) => value.toLocaleLowerCase('pt-BR').normalize('N
 
 export function duplicateActivity(source: Activity): Activity {
   const suffix = crypto.randomUUID()
-  return { ...structuredClone(source), id: `atividade-${suffix}`, slug: `${slugify(source.title)}-copia-${suffix.slice(0, 6)}`, title: `${source.title} (cópia)`, status: 'draft' }
+  return { ...structuredClone(source), id: `atividade-${suffix}`, slug: `${slugify(source.title)}-copia-${suffix.slice(0, 6)}`, title: `${source.title} (cópia)`, status: 'draft', verificationMode: 'manual' }
 }
 
 export function prepareActivityForSave(draft: Activity): Activity {
   const suffix = crypto.randomUUID()
-  return { ...structuredClone(draft), id: `atividade-${suffix}`, slug: `${slugify(draft.title)}-${suffix.slice(0, 6)}`, scoring: { totalPoints: draft.requirements.reduce((sum, requirement) => sum + requirement.points, 0) } }
+  return { ...structuredClone(draft), id: `atividade-${suffix}`, slug: `${slugify(draft.title)}-${suffix.slice(0, 6)}`, verificationMode: 'manual', scoring: { totalPoints: draft.requirements.reduce((sum, requirement) => sum + requirement.points, 0) } }
 }
 
 export function createRequirement(type: Exclude<Activity['requirements'][number]['type'], 'spelling'>): Activity['requirements'][number] {

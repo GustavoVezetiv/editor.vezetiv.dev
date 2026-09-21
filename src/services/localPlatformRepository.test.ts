@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { activity01 } from '../config/activity01'
-import { LocalPlatformRepository, localPlatformRepository } from './localPlatformRepository'
+import { generateAccessCode, LocalPlatformRepository, localPlatformRepository } from './localPlatformRepository'
 
 const values = new Map<string, string>()
 Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value), removeItem: (key: string) => values.delete(key) } })
@@ -56,4 +56,10 @@ test('join de produção não cria turma desconhecida', () => {
   const isolated = new Map<string, string>()
   const repository = new LocalPlatformRepository({ demoMode: false, storage: { getItem: (key) => isolated.get(key) ?? null, setItem: (key, value) => isolated.set(key, value) } })
   assert.throws(() => repository.join('INEXISTENTE', 'A01', 'Aluno'), /Turma não encontrada/)
+})
+
+test('código de acesso amigável possui aproximadamente 60 bits', () => {
+  const codes = new Set(Array.from({ length: 100 }, generateAccessCode))
+  assert.equal(codes.size, 100)
+  for (const code of codes) assert.match(code, /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}(?:-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}){2}$/)
 })

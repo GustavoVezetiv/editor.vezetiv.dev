@@ -11,6 +11,14 @@ O frontend resolve um `Actor`: `anonymous`, `student` ou `teacher`. Aluno usa `s
 
 Os códigos individuais existem somente como hash bcrypt em `private.student_access_codes`. O valor aberto é mostrado ao professor apenas na criação/redefinição; redefinir também desvincula a sessão anônima anterior.
 
+O código usa 12 caracteres de um alfabeto de 32 símbolos (aproximadamente 60 bits) e funciona como credencial. Um login válido em outro navegador assume o vínculo; por RLS, a sessão anterior perde acesso. A resposta de falha não diferencia turma, aluno ou código inválido.
+
+## Integridade do score
+
+O navegador executa `verifyActivity` apenas para feedback imediato. No modo Supabase, a Edge Function `verify-document` ignora score, resultados, atividade e conteúdo enviados pelo cliente: recebe apenas IDs, lê Activity e Document oficiais, executa a mesma engine e grava por uma RPC exclusiva do `service_role`. O papel `authenticated` não pode atualizar `attempts.current_score`, `score_reached_at`, inserir `verification_runs` nem concluir por UPDATE.
+
+O bloqueio de colagem é somente um controle pedagógico de UI. A fronteira antifraude é a verificação oficial server-side.
+
 ## Matriz de autorização
 
 | Ação | Sem sessão | Aluno | Professor |
@@ -32,7 +40,8 @@ O cliente do aluno não consulta a tabela de colegas nem tentativas alheias. `ge
 ## Antes da produção
 
 - Aplicar todas as migrações incrementais no projeto Supabase correto e executar testes de RLS com três identidades: anônima sem vínculo, aluno e professor.
-- Provisionar professores no Auth e vincular ao menos uma turma por `classes.teacher_id`.
+- Provisionar professores no Auth e em `teacher_profiles`; a primeira turma será vinculada por `classes.teacher_id` ao ser criada.
 - Habilitar Anonymous Sign-Ins e configurar URLs permitidas para o magic link.
+- Configurar CAPTCHA (Turnstile/hCaptcha) e revisar o rate limit nativo de anonymous sign-ins; o padrão atual é 30/hora/IP.
 - Nunca colocar `service_role`, SMTP secreto ou credenciais administrativas em variáveis `VITE_*`.
 - Validar backup, retenção e base legal antes de armazenar dados reais de menores.

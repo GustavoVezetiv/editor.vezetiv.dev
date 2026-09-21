@@ -9,6 +9,7 @@ import type {
 import type { PedagogicalEvent } from "../events/pedagogicalEvents";
 import { ActivityBuilder } from "./ActivityBuilder";
 import { ReadOnlyDocument } from "./ReadOnlyDocument";
+import { bestAttemptScore, bestVerificationRun } from "../activity/attemptScoring";
 
 interface TeacherPageProps {
   dashboard: TeacherDashboard;
@@ -366,7 +367,7 @@ export function TeacherPage(props: TeacherPageProps) {
                         : "Em andamento"}
                     </small>
                   </span>
-                  <strong>{attempt.currentScore}</strong>
+                  <strong>{bestAttemptScore(attempt)}</strong>
                 </button>
               ))
             ) : (
@@ -385,7 +386,8 @@ export function TeacherPage(props: TeacherPageProps) {
                   {selected.status === "completed"
                     ? "Concluída"
                     : "Em andamento"}{" "}
-                  · {selected.currentScore} pontos
+                  · {bestAttemptScore(selected)} pontos
+                  {bestVerificationRun(selected) ? ` · melhor resultado em ${new Date(bestVerificationRun(selected)!.createdAt).toLocaleString("pt-BR")}` : ""}
                 </p>
                 <h3>Documento</h3>
                 {selected.documents.length > 1 ? (

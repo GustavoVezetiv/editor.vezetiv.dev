@@ -5,6 +5,7 @@ import { VerificationPanel } from '../verification/VerificationPanel'
 interface ActivityPanelProps {
   activity: Activity
   results: CheckResult[] | null
+  resultSource: 'preview' | 'official' | null
   hasUnverifiedChanges: boolean
   onVerify: () => void
   onHintOpened: (requirementId: string) => void
@@ -13,7 +14,7 @@ interface ActivityPanelProps {
   isCompleted: boolean
 }
 
-export function ActivityPanel({ activity, results, hasUnverifiedChanges, onVerify, onHintOpened, onHintChanged, onComplete, isCompleted }: ActivityPanelProps) {
+export function ActivityPanel({ activity, results, resultSource, hasUnverifiedChanges, onVerify, onHintOpened, onHintChanged, onComplete, isCompleted }: ActivityPanelProps) {
   return (
     <aside className="activity-panel" aria-labelledby="activity-title">
       <div className="activity-scroll">
@@ -39,8 +40,8 @@ export function ActivityPanel({ activity, results, hasUnverifiedChanges, onVerif
         </section>
       </div>
       <VerificationPanel
-        mode={activity.verificationMode}
         results={results}
+        resultSource={resultSource}
         hasUnverifiedChanges={hasUnverifiedChanges}
         onVerify={onVerify}
         activity={activity}

@@ -44,7 +44,13 @@ const emptyDashboard = (): TeacherDashboard => ({
 
 function RouteRedirect({ onRedirect }: { onRedirect: () => void }) {
   useEffect(onRedirect, [onRedirect]);
-  return <main className="entry-page"><section className="entry-card"><h1>Redirecionando…</h1></section></main>;
+  return (
+    <main className="entry-page">
+      <section className="entry-card">
+        <h1>Redirecionando…</h1>
+      </section>
+    </main>
+  );
 }
 
 function App() {
@@ -67,8 +73,14 @@ function App() {
     history.pushState({}, "", path);
     setRoute(next);
   }, []);
-  const redirectStudent = useCallback(() => navigate("home", "/student"), [navigate]);
-  const redirectTeacher = useCallback(() => navigate("teacher", "/teacher"), [navigate]);
+  const redirectStudent = useCallback(
+    () => navigate("home", "/student"),
+    [navigate],
+  );
+  const redirectTeacher = useCallback(
+    () => navigate("teacher", "/teacher"),
+    [navigate],
+  );
 
   const loadStudent = useCallback(
     async (
@@ -248,6 +260,28 @@ function App() {
     },
     [activities, actor, repository],
   );
+  const verifyDocument = useCallback(
+    async (attempt: ActivityAttempt, activity: Activity, documentId: string) => {
+      if (!repository) return { attempt, remoteState: "blocked" as const };
+      const saved = await repository.verifyDocument(attempt, activity, documentId);
+      setActiveAttempt(saved.attempt);
+      setAttempts((items) => [...items.filter((item) => item.id !== saved.attempt.id), saved.attempt]);
+      const featured = activities.find((item) => item.assignment.isFeatured);
+      if (actor.role === "student" && featured) setRanking(await repository.ranking(actor.student.classId, featured.activity.id, actor.student.id));
+      return saved;
+    },
+    [activities, actor, repository],
+  );
+  const completeAttempt = useCallback(
+    async (attempt: ActivityAttempt) => {
+      if (!repository) return { attempt, remoteState: "blocked" as const };
+      const saved = await repository.completeAttempt(attempt);
+      setActiveAttempt(saved.attempt);
+      setAttempts((items) => [...items.filter((item) => item.id !== saved.attempt.id), saved.attempt]);
+      return saved;
+    },
+    [repository],
+  );
   const refreshTeacher = async (classId = selectedClassId) => {
     if (repository) await loadTeacher(repository, classId);
   };
@@ -315,8 +349,17 @@ function App() {
         </section>
       </main>
     );
-  if (actor.role === "student" && (route === "teacher" || route === "teacher-login")) return <RouteRedirect onRedirect={redirectStudent} />;
-  if (actor.role === "teacher" && route !== "teacher" && route !== "teacher-login") return <RouteRedirect onRedirect={redirectTeacher} />;
+  if (
+    actor.role === "student" &&
+    (route === "teacher" || route === "teacher-login")
+  )
+    return <RouteRedirect onRedirect={redirectStudent} />;
+  if (
+    actor.role === "teacher" &&
+    route !== "teacher" &&
+    route !== "teacher-login"
+  )
+    return <RouteRedirect onRedirect={redirectTeacher} />;
   if (route === "teacher-login")
     return actor.role === "teacher" ? (
       <TeacherPage
@@ -394,6 +437,8 @@ function App() {
         student={actor.student}
         initialAttempt={activeAttempt}
         onSaveAttempt={saveAttempt}
+        onVerifyDocument={verifyDocument}
+        onCompleteAttempt={completeAttempt}
         onBack={() => navigate("home", "/student")}
       />
     );

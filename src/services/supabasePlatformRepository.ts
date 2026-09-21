@@ -37,6 +37,7 @@ function activityFromRow(row: Row): Activity {
   delete content.availableUntil;
   return {
     ...content,
+    verificationMode: "manual",
     id: String(row.id),
     slug: String(row.slug),
     title: String(row.title),
@@ -265,100 +266,12 @@ export class SupabasePlatformRepository implements PlatformRepository {
     studentId: string,
     activity: Activity,
   ): Promise<ActivityAttempt> {
-    const { data: open, error } = await this.client
-      .from("attempts")
-      .select("*")
-      .eq("student_id", studentId)
-      .eq("activity_id", activity.id)
-      .neq("status", "completed")
-      .maybeSingle();
+    void studentId;
+    const { data, error } = await this.client.rpc("start_attempt", {
+      p_activity_id: activity.id,
+    });
     if (error) throw new Error(error.message);
-    if (open) return this.loadAttempt(open as Row);
-    const { data: completed, error: completedError } = await this.client
-      .from("attempts")
-      .select("*")
-      .eq("student_id", studentId)
-      .eq("activity_id", activity.id)
-      .eq("status", "completed")
-      .order("completed_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (completedError) throw new Error(completedError.message);
-    if (completed) return this.loadAttempt(completed as Row);
-    const timestamp = new Date().toISOString();
-    const attemptId = `attempt-${crypto.randomUUID()}`;
-    const documentId = `document-${crypto.randomUUID()}`;
-    const { data: attemptRow, error: attemptError } = await this.client
-      .from("attempts")
-      .insert({
-        id: attemptId,
-        student_id: studentId,
-        activity_id: activity.id,
-        started_at: timestamp,
-        current_score: 0,
-        status: "in-progress",
-        active_document_id: documentId,
-        updated_at: timestamp,
-      })
-      .select("*")
-      .single();
-    if (attemptError) throw new Error(attemptError.message);
-    const document: ActivityDocument = {
-      id: documentId,
-      name: "Documento 1",
-      content: clone(activity.initialContent),
-      preset: activity.defaultDocumentPreset,
-      updatedAt: timestamp,
-    };
-    const insertedDocument = await this.client
-      .from("documents")
-      .insert({
-        id: document.id,
-        attempt_id: attemptId,
-        name: document.name,
-        content_json: document.content,
-        preset: document.preset,
-        updated_at: timestamp,
-      });
-    if (insertedDocument.error) throw new Error(insertedDocument.error.message);
-    const event: PedagogicalEvent = {
-      id: crypto.randomUUID(),
-      timestamp,
-      activityId: activity.id,
-      attemptId,
-      documentId,
-      type: "activity_started",
-      metadata: {},
-    };
-    const insertedEvent = await this.client
-      .from("activity_events")
-      .insert({
-        id: event.id,
-        attempt_id: attemptId,
-        document_id: documentId,
-        type: event.type,
-        metadata: event.metadata,
-        created_at: timestamp,
-      });
-    if (insertedEvent.error) throw new Error(insertedEvent.error.message);
-    return {
-      ...attemptFromRows(
-        attemptRow as Row,
-        [
-          {
-            id: document.id,
-            attempt_id: attemptId,
-            name: document.name,
-            content_json: document.content,
-            preset: document.preset,
-            updated_at: timestamp,
-          },
-        ],
-        [],
-        [],
-      ),
-      events: [event],
-    };
+    return this.loadAttempt({ id: String(data) });
   }
   private async dependenciesExist(attempt: ActivityAttempt): Promise<boolean> {
     const { data: student } = await this.client
@@ -393,65 +306,45 @@ export class SupabasePlatformRepository implements PlatformRepository {
     if (existing?.status === "completed") return;
     // Child rows must be persisted while the attempt is still open. Once the
     // final update marks it completed, RLS intentionally makes it immutable.
-    const documents = await this.client
-      .from("documents")
-      .upsert(
-        attempt.documents.map((document) => ({
-          id: document.id,
-          attempt_id: attempt.id,
-          name: document.name,
-          content_json: document.content,
-          preset: document.preset,
-          updated_at: document.updatedAt,
-        })),
-      );
+    const documents = await this.client.from("documents").upsert(
+      attempt.documents.map((document) => ({
+        id: document.id,
+        attempt_id: attempt.id,
+        name: document.name,
+        content_json: document.content,
+        preset: document.preset,
+        updated_at: document.updatedAt,
+      })),
+    );
     if (documents.error) throw new Error(documents.error.message);
-    if (attempt.verificationRuns.length) {
-      const runs = await this.client
-        .from("verification_runs")
-        .upsert(
-          attempt.verificationRuns.map((run) => ({
-            id: run.id,
-            attempt_id: run.attemptId,
-            document_id: run.documentId,
-            score: run.score,
-            results_json: run.results,
-            created_at: run.createdAt,
-          })),
-          { onConflict: "id", ignoreDuplicates: true },
-        );
-      if (runs.error) throw new Error(runs.error.message);
-    }
-    if (attempt.events.length) {
-      const events = await this.client
-        .from("activity_events")
-        .upsert(
-          attempt.events.map((event) => ({
-            id: event.id,
-            attempt_id: event.attemptId,
-            document_id: event.documentId,
-            type: event.type,
-            metadata: event.metadata,
-            created_at: event.timestamp,
-          })),
-          { onConflict: "id", ignoreDuplicates: true },
-        );
+    const clientEvents = attempt.events.filter(
+      (event) =>
+        ![
+          "activity_started",
+          "verification_requested",
+          "verification_completed",
+          "requirement_passed",
+          "activity_completed",
+        ].includes(event.type),
+    );
+    if (clientEvents.length) {
+      const events = await this.client.from("activity_events").upsert(
+        clientEvents.map((event) => ({
+          id: event.id,
+          attempt_id: event.attemptId,
+          document_id: event.documentId,
+          type: event.type,
+          metadata: event.metadata,
+          created_at: event.timestamp,
+        })),
+        { onConflict: "id", ignoreDuplicates: true },
+      );
       if (events.error) throw new Error(events.error.message);
     }
-    const savedAttempt = await this.client
-      .from("attempts")
-      .upsert({
-        id: attempt.id,
-        student_id: attempt.studentId,
-        activity_id: attempt.activityId,
-        started_at: attempt.startedAt,
-        completed_at: attempt.completedAt ?? null,
-        current_score: attempt.currentScore,
-        score_reached_at: attempt.scoreReachedAt ?? null,
-        status: attempt.status,
-        active_document_id: attempt.activeDocumentId,
-        updated_at: attempt.updatedAt,
-      });
+    const savedAttempt = await this.client.rpc("save_attempt_state", {
+      p_attempt_id: attempt.id,
+      p_active_document_id: attempt.activeDocumentId,
+    });
     if (savedAttempt.error) throw new Error(savedAttempt.error.message);
   }
   async saveAttempt(attempt: ActivityAttempt): Promise<SavedAttempt> {
@@ -468,6 +361,33 @@ export class SupabasePlatformRepository implements PlatformRepository {
       this.enqueue(attempt);
       return { attempt, remoteState: "retrying" };
     }
+  }
+  async verifyDocument(
+    attempt: ActivityAttempt,
+    _activity: Activity,
+    documentId: string,
+  ): Promise<SavedAttempt> {
+    await this.persistAttempt(attempt);
+    const { error } = await this.client.functions.invoke("verify-document", {
+      body: { attemptId: attempt.id, documentId },
+    });
+    if (error) throw new Error(error.message);
+    return {
+      attempt: await this.loadAttempt({ id: attempt.id }),
+      remoteState: "synced",
+    };
+  }
+  async completeAttempt(attempt: ActivityAttempt): Promise<SavedAttempt> {
+    await this.persistAttempt(attempt);
+    const { error } = await this.client.rpc("complete_attempt", {
+      p_attempt_id: attempt.id,
+      p_document_id: attempt.activeDocumentId,
+    });
+    if (error) throw new Error(error.message);
+    return {
+      attempt: await this.loadAttempt({ id: attempt.id }),
+      remoteState: "synced",
+    };
   }
   async retryPending(): Promise<number> {
     const pending = this.readOutbox();

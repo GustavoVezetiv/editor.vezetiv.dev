@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import type { Activity, VerificationMode } from '../types/activity'
+import type { Activity } from '../types/activity'
 import { calculateScore } from './scoring'
 import type { CheckResult } from './verifyActivity'
 
 interface VerificationPanelProps {
   activity: Activity
-  mode: VerificationMode
   results: CheckResult[] | null
+  resultSource: 'preview' | 'official' | null
   hasUnverifiedChanges: boolean
   onVerify: () => void
   onHintOpened: (requirementId: string) => void
@@ -14,7 +14,7 @@ interface VerificationPanelProps {
   readOnly?: boolean
 }
 
-export function VerificationPanel({ activity, mode, results, hasUnverifiedChanges, onVerify, onHintOpened, onHintChanged, readOnly = false }: VerificationPanelProps) {
+export function VerificationPanel({ activity, results, resultSource, hasUnverifiedChanges, onVerify, onHintOpened, onHintChanged, readOnly = false }: VerificationPanelProps) {
   const [openHintId, setOpenHintId] = useState<string | null>(null)
   const completed = results?.filter((result) => result.passed).length ?? 0
   const score = results ? calculateScore(activity, results) : null
@@ -30,12 +30,17 @@ export function VerificationPanel({ activity, mode, results, hasUnverifiedChange
     <section className="verification-panel" aria-labelledby="verification-title">
       <div>
         <h2 id="verification-title">Verificação</h2>
-        <p>{mode === 'manual' ? 'Leia, execute e verifique quando estiver pronto.' : 'Atualizado automaticamente conforme você edita.'}</p>
+        <p>Leia, execute e verifique quando estiver pronto.</p>
       </div>
-      {mode === 'manual' && <button className="verify-button" type="button" onClick={onVerify} disabled={readOnly}>Verificar atividade</button>}
+      <button className="verify-button" type="button" onClick={onVerify} disabled={readOnly}>Verificar atividade</button>
       {hasUnverifiedChanges && results && <p className="verification-pending" role="status">O documento foi alterado. Verifique novamente.</p>}
       {results && results.length > 0 && (
         <div className="check-results" aria-live="polite">
+          <p className="verification-pending">
+            {resultSource === 'preview'
+              ? 'Prévia local deste documento. O resultado oficial está sendo confirmado.'
+              : 'Resultado oficial deste documento.'}
+          </p>
           <p className="check-summary">{completed} de {results.length} requisitos concluídos</p>
           {score && <p className="score-summary">{score.earnedPoints} / {score.totalPoints} pontos</p>}
           <ul>

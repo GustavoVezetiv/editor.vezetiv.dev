@@ -19,6 +19,16 @@ jobs:
       - run: npm run lint
       - run: npm run build
 
+  edge-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno fmt --check supabase/functions/verify-document
+      - run: deno check --config supabase/functions/verify-document/deno.json supabase/functions/verify-document/index.ts
+
   e2e:
     runs-on: ubuntu-latest
     steps:
