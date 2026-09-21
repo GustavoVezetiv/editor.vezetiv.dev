@@ -84,7 +84,6 @@ export const activity01: Activity = {
   ],
   scoring: { totalPoints: 100 },
   status: 'published',
-  isFeatured: true,
 }
 
 export const activity02: Activity = {
@@ -111,7 +110,6 @@ export const activity02: Activity = {
   ],
   scoring: { totalPoints: 100 },
   status: 'published',
-  isFeatured: false,
 }
 
 export const activity03: Activity = {
@@ -138,7 +136,6 @@ export const activity03: Activity = {
   ],
   scoring: { totalPoints: 100 },
   status: 'published',
-  isFeatured: false,
 }
 
 export const builtInActivities = [activity01, activity02, activity03]

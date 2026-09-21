@@ -96,9 +96,6 @@ export interface Activity {
   hints: ActivityHint[]
   scoring: ActivityScoring
   status: ActivityStatus
-  availableFrom?: string
-  availableUntil?: string
-  isFeatured: boolean
 }
 
 export interface ActivityDocument {

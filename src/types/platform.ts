@@ -15,7 +15,7 @@ export interface Classroom {
 export interface Student {
   id: string
   classId: string
-  code: string
+  code?: string
   displayName: string
   createdAt: string
 }
@@ -28,6 +28,21 @@ export interface ClassActivity {
   availableFrom?: string
   availableUntil?: string
   createdAt: string
+}
+
+export interface AssignedActivity {
+  activity: Activity
+  assignment: ClassActivity
+}
+
+export type Actor =
+  | { role: 'anonymous' }
+  | { role: 'student'; student: Student }
+  | { role: 'teacher'; userId: string }
+
+export interface StudentAccessProvision {
+  student: Student
+  accessCode: string
 }
 
 export interface VerificationRun {
@@ -56,10 +71,11 @@ export interface ActivityAttempt {
 }
 
 export interface RankedStudent {
-  student: Student
+  displayName: string
   score: number
   reachedScoreAt: string
   position: number
+  isCurrentStudent: boolean
 }
 
 export interface TeacherDashboard {
@@ -81,7 +97,6 @@ export interface ActivityDraft {
   defaultDocumentPreset: DocumentPreset
   verificationMode: Activity['verificationMode']
   enabledTools: Activity['enabledTools']
-  isFeatured: boolean
   requirements: Activity['requirements']
   hints: Activity['hints']
 }

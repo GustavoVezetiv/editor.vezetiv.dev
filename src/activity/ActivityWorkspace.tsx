@@ -11,6 +11,7 @@ import { calculateScore } from '../verification/scoring'
 import { verifyActivity } from '../verification/verifyActivity'
 import type { RemoteSaveState, SavedAttempt } from '../services/platformRepository'
 import { canEditAttempt, isDocumentDirty } from './attemptState'
+import { newlyPassedRequirementIds, scoreStateFromRuns } from './attemptScoring'
 
 interface ActivityWorkspaceProps {
   activity: Activity
@@ -80,9 +81,15 @@ export function ActivityWorkspace({ activity, student, initialAttempt, onSaveAtt
     const results = verifyActivity(document.content, activity, document.preset)
     const score = calculateScore(activity, results)
     const run: VerificationRun = { id: `verification-${crypto.randomUUID()}`, attemptId: current.id, documentId: document.id, score: score.earnedPoints, results, createdAt: new Date().toISOString() }
-    let next: ActivityAttempt = { ...current, currentScore: score.earnedPoints, scoreReachedAt: current.currentScore === score.earnedPoints ? current.scoreReachedAt : run.createdAt, verificationRuns: [...current.verificationRuns, run] }
+    const verificationRuns = [...current.verificationRuns, run]
+    const scoreState = scoreStateFromRuns(verificationRuns)
+    let next: ActivityAttempt = { ...current, ...scoreState, verificationRuns }
     next = withEvent(next, 'verification_requested', document.id)
     next = withEvent(next, 'verification_completed', document.id, { score: score.earnedPoints })
+    for (const requirementId of newlyPassedRequirementIds(current, run)) {
+      const requirement = activity.requirements.find((item) => item.id === requirementId)
+      next = withEvent(next, 'requirement_passed', document.id, { requirementId, label: requirement?.label })
+    }
     persist(next, true)
   }, [activity, persist, withEvent])
 
@@ -111,7 +118,10 @@ export function ActivityWorkspace({ activity, student, initialAttempt, onSaveAtt
     persist(withEvent(next, 'preset_changed', next.activeDocumentId, { preset }))
   }
   const blockedPaste = () => { persist(withEvent(attemptRef.current, 'paste_blocked', attemptRef.current.activeDocumentId)); setPasteNotice(true); window.setTimeout(() => setPasteNotice(false), 4200) }
-  const openHint = (requirementId: string) => persist(withEvent(attemptRef.current, 'hint_opened', attemptRef.current.activeDocumentId, { requirementId }))
+  const openHint = (requirementId: string) => {
+    const hint = activity.hints.find((item) => item.requirementId === requirementId)
+    persist(withEvent(attemptRef.current, 'hint_opened', attemptRef.current.activeDocumentId, { requirementId, title: hint?.title }))
+  }
   const complete = () => setCompletionOpen(true)
   const confirmCompletion = () => {
     persist(withEvent({ ...attemptRef.current, status: 'completed', completedAt: new Date().toISOString() }, 'activity_completed', attemptRef.current.activeDocumentId), true)

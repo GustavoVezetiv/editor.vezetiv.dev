@@ -28,10 +28,10 @@ export function ActivityPanel({ activity, results, hasUnverifiedChanges, onVerif
           </ol>
         </section>
 
-        <section className="source-text" aria-labelledby="source-text-title">
+        {activity.sourceText ? <section className="source-text" aria-labelledby="source-text-title">
           <h2 id="source-text-title">Texto para digitar</h2>
           <p>{activity.sourceText}</p>
-        </section>
+        </section> : null}
 
         <section className="learning-note" aria-label="Como usar a atividade">
           <strong>Como aprender</strong>

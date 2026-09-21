@@ -126,6 +126,23 @@ test('mantém o requisito de negrito quando outra ocorrência não está em negr
   assert.equal(resultsFor(multipleOccurrences).bold, true)
 })
 
+test('aceita palavra em negrito dividida em vários nós inline', () => {
+  const splitBold: JSONContent = { type: 'doc', content: [{ type: 'paragraph', content: [
+    { type: 'text', text: 'susten', marks: [{ type: 'bold' }] },
+    { type: 'text', text: 'tabilidade', marks: [{ type: 'bold' }] },
+  ] }] }
+  assert.equal(resultsFor(splitBold).bold, true)
+})
+
+test('diferencia comparação exata de normalizada', () => {
+  const content: JSONContent = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: '  TEXTO   solicitado  ' }] }] }
+  const requirement = { id: 'text', type: 'text-content' as const, text: 'Texto solicitado', points: 10, label: 'Texto', objective: 'Digitar.' }
+  const exact = { ...activity01, requirements: [{ ...requirement, matchMode: 'exact' as const }] }
+  const normalized = { ...activity01, requirements: [{ ...requirement, matchMode: 'normalized' as const }] }
+  assert.equal(verifyActivity(content, exact)[0].passed, false)
+  assert.equal(verifyActivity(content, normalized)[0].passed, true)
+})
+
 test('calcula similaridade local e determinística para texto solicitado', () => {
   assert.equal(textSimilarity('Texto de teste', 'Texto de teste'), 1)
   assert.ok(textSimilarity('Este é um texto suficientemente longo para validar pequenas diferenças de pontuação.', 'Este é um texto suficientemente longo para validar pequenas diferenças de pontuação') > 0.95)

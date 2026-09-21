@@ -10,10 +10,11 @@ flowchart LR
   V --> R[Resultado, feedback e score]
   W --> F[Fachada de repository]
   F -->|demo| L[LocalPlatformRepository]
-  F -->|sessão autenticada| P[SupabasePlatformRepository]
+  F -->|VITE_APP_MODE=supabase| P[SupabasePlatformRepository]
   P --> DB[(Supabase)]
-  T[Professor] --> D[/teacher]
-  D --> L
+  T[Professor] --> A[Magic link]
+  A --> D[/teacher]
+  D --> F
 ```
 
 ## Núcleos
@@ -24,17 +25,21 @@ flowchart LR
 - `src/activity` e `src/editor`: interação do estudante e persistência com debounce.
 - `src/services/localPlatformRepository.ts`: fonte de verdade somente do modo demo, dados seed e ranking determinístico por turma.
 - `src/services/supabasePlatformRepository.ts`: leituras e gravações remotas, dependências ordenadas e outbox limitada.
-- `src/services/platformRepository.ts`: contrato e seleção da implementação de acordo com a sessão.
+- `src/services/authService.ts`: resolve o `Actor` (`anonymous`, `student` ou `teacher`) e concentra entrada/saída.
+- `src/services/platformRepository.ts`: contrato e seleção explícita da implementação conforme `VITE_APP_MODE`.
 
 ## Persistência e falhas
 
 No modo Supabase, o banco remoto é a fonte de verdade. Uma gravação que falha entra em uma outbox local limitada, retomada na inicialização e no próximo save. Dependências ausentes são marcadas como bloqueio e não entram em retry infinito. No modo demo, o `localStorage` continua sendo a fonte de verdade.
 
+`Activity` contém apenas conteúdo reutilizável. Destaque e janela de disponibilidade vivem exclusivamente em `ClassActivity`. Score é o maior valor entre todas as verificações e documentos da tentativa; `scoreReachedAt` mantém a primeira vez em que esse máximo foi atingido.
+
 ## Rotas
 
 | Rota | Finalidade |
 | --- | --- |
-| `/` ou `/student` | Área do estudante autenticado localmente |
+| `/` ou `/student` | Área do estudante autenticado |
 | `/join` | Entrada na turma |
 | `/activity/:slug` | Recupera ou cria a tentativa da atividade |
 | `/teacher` | Painel docente |
+| `/teacher/login` | Solicitação de magic link do professor |

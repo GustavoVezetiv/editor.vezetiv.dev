@@ -55,17 +55,41 @@ export function textSimilarity(actual: string, expected: string): number {
   return 1 - previous[target.length] / Math.max(source.length, target.length)
 }
 
-function hasWholeWord(value: string, expected: string): boolean {
-  const escaped = normalizeText(expected).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return new RegExp(`(^|[^\\p{L}\\p{N}_])${escaped}(?=$|[^\\p{L}\\p{N}_])`, 'iu').test(normalizeText(value))
+interface InlineCharacter { value: string; marks: Set<string> }
+
+function inlineCharacters(node: JSONContent): InlineCharacter[] {
+  const characters: InlineCharacter[] = []
+  walk(node, (item) => {
+    if (item.type !== 'text' || !item.text) return
+    const marks = new Set((item.marks ?? []).map((mark) => mark.type))
+    for (const value of item.text) characters.push({ value, marks })
+  })
+  return characters
+}
+
+function markedPhraseInBlock(node: JSONContent, expected: string, mark: string): { found: boolean; passed: boolean } {
+  const characters = inlineCharacters(node)
+  const text = characters.map((character) => character.value).join('')
+  const escaped = expected.normalize('NFC').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = new RegExp(`(^|[^\\p{L}\\p{N}_])(${escaped})(?=$|[^\\p{L}\\p{N}_])`, 'giu')
+  let found = false
+  let passed = false
+  for (const match of text.normalize('NFC').matchAll(pattern)) {
+    found = true
+    const prefixLength = match[1]?.length ?? 0
+    const start = (match.index ?? 0) + prefixLength
+    const end = start + match[2].length
+    if (characters.slice(start, end).every((character) => character.marks.has(mark))) passed = true
+  }
+  return { found, passed }
 }
 
 const handlers: Record<ActivityRequirement['type'], RequirementHandler> = {
   'text-content': (content, rawRequirement) => {
     const requirement = rawRequirement as Extract<ActivityRequirement, { type: 'text-content' }>
     const candidates = findNodes(content, (node) => node.type === 'paragraph' || node.type === 'heading').map(getText).filter(Boolean)
-    if (requirement.matchMode === 'exact') return { passed: candidates.some((candidate) => candidate.includes(requirement.text)), feedback: 'Digite o texto solicitado e confira a escrita.' }
-    if (requirement.matchMode === 'normalized') return { passed: candidates.some((candidate) => normalizeText(candidate).includes(normalizeText(requirement.text))), feedback: 'O texto solicitado ainda não foi reconhecido. Revise se todas as palavras foram digitadas.' }
+    if (requirement.matchMode === 'exact') return { passed: candidates.some((candidate) => candidate === requirement.text), feedback: 'Digite o texto solicitado exatamente como apresentado.' }
+    if (requirement.matchMode === 'normalized') return { passed: candidates.some((candidate) => normalizeText(candidate) === normalizeText(requirement.text)), feedback: 'O texto solicitado ainda não foi reconhecido. Revise se todas as palavras foram digitadas.' }
     const similarity = candidates.reduce((best, candidate) => Math.max(best, textSimilarity(candidate, requirement.text)), 0)
     return { passed: similarity >= (requirement.similarityThreshold ?? 0.95), detail: `Texto: ${Math.round(similarity * 100)}% semelhante ao solicitado.`, feedback: 'Revise o texto para aproximá-lo do enunciado.' }
   },
@@ -84,11 +108,11 @@ const handlers: Record<ActivityRequirement['type'], RequirementHandler> = {
     const requirement = rawRequirement as Extract<ActivityRequirement, { type: 'text-mark' }>
     let foundText = false
     let passed = false
-    walk(content, (node) => {
-      if (node.type !== 'text' || !hasWholeWord(node.text ?? '', requirement.text)) return
-      foundText = true
-      passed ||= node.marks?.some((mark) => mark.type === requirement.mark) ?? false
-    })
+    for (const block of findNodes(content, (node) => node.type === 'paragraph' || node.type === 'heading')) {
+      const result = markedPhraseInBlock(block, requirement.text, requirement.mark)
+      foundText ||= result.found
+      passed ||= result.passed
+    }
     const markLabel = requirement.mark === 'bold' ? 'negrito' : requirement.mark === 'italic' ? 'itálico' : 'sublinhado'
     return { passed, feedback: foundText ? `A palavra foi encontrada, mas ainda não está em ${markLabel}.` : `Digite a palavra “${requirement.text}” antes de aplicar ${markLabel}.` }
   },
