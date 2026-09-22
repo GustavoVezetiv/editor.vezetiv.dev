@@ -19,6 +19,8 @@ O navegador executa `verifyActivity` apenas para feedback imediato. No modo Supa
 
 O bloqueio de colagem é somente um controle pedagógico de UI. A fronteira antifraude é a verificação oficial server-side.
 
+Documentos usam `revision` atribuída pelo banco. Cada verificação oficial registra `document_revision`, portanto o estado “alterado após verificar” não compara relógio do navegador com relógio do servidor. Exclusões usam `deleted_at`: o aluno não possui `DELETE`, `INSERT` ou `UPDATE` direto na tabela de documentos e opera por RPCs validadas. O histórico referenciado por verificações e eventos é preservado.
+
 ## Matriz de autorização
 
 | Ação | Sem sessão | Aluno | Professor |

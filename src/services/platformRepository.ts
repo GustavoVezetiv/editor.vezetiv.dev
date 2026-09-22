@@ -12,6 +12,7 @@ import type {
 import { LocalPlatformRepository } from "./localPlatformRepository";
 import { appMode, requireSupabase } from "./supabase";
 import { SupabasePlatformRepository } from "./supabasePlatformRepository";
+import { AttemptOperationQueue } from "./attemptOperationQueue";
 
 export type RemoteSaveState = "local" | "synced" | "retrying" | "blocked";
 export interface SavedAttempt {
@@ -35,6 +36,10 @@ export interface PlatformRepository {
   verifyDocument(
     attempt: ActivityAttempt,
     activity: Activity,
+    documentId: string,
+  ): Promise<SavedAttempt>;
+  deleteDocument(
+    attempt: ActivityAttempt,
     documentId: string,
   ): Promise<SavedAttempt>;
   completeAttempt(attempt: ActivityAttempt): Promise<SavedAttempt>;
@@ -67,6 +72,7 @@ export interface PlatformRepository {
 
 class LocalRepositoryAdapter implements PlatformRepository {
   readonly mode = "demo" as const;
+  private readonly mutations = new AttemptOperationQueue();
   constructor(private readonly repository: LocalPlatformRepository) {}
   async listAssignedActivities(student: Student) {
     return this.repository.listAssignedActivities(student);
@@ -87,26 +93,35 @@ class LocalRepositoryAdapter implements PlatformRepository {
     return this.repository.openAttempt(studentId, activity);
   }
   async saveAttempt(attempt: ActivityAttempt): Promise<SavedAttempt> {
-    return {
+    return this.mutations.run(attempt.id, async () => ({
       attempt: this.repository.saveAttempt(attempt),
       remoteState: "local",
-    };
+    }));
   }
   async verifyDocument(
     attempt: ActivityAttempt,
     activity: Activity,
     documentId: string,
   ): Promise<SavedAttempt> {
-    return {
+    return this.mutations.run(attempt.id, async () => ({
       attempt: this.repository.verifyDocument(attempt, activity, documentId),
       remoteState: "local",
-    };
+    }));
+  }
+  async deleteDocument(
+    attempt: ActivityAttempt,
+    documentId: string,
+  ): Promise<SavedAttempt> {
+    return this.mutations.run(attempt.id, async () => ({
+      attempt: this.repository.deleteDocument(attempt, documentId),
+      remoteState: "local",
+    }));
   }
   async completeAttempt(attempt: ActivityAttempt): Promise<SavedAttempt> {
-    return {
+    return this.mutations.run(attempt.id, async () => ({
       attempt: this.repository.completeAttempt(attempt),
       remoteState: "local",
-    };
+    }));
   }
   async createClass(name: string, code: string) {
     return this.repository.createClass(name, code);

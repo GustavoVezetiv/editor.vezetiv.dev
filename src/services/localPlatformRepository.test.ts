@@ -63,3 +63,61 @@ test('código de acesso amigável possui aproximadamente 60 bits', () => {
   assert.equal(codes.size, 100)
   for (const code of codes) assert.match(code, /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}(?:-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}){2}$/)
 })
+
+test('soft delete oculta documento do aluno e preserva histórico docente', () => {
+  const isolated = new Map<string, string>()
+  const repository = new LocalPlatformRepository({ storage: { getItem: (key) => isolated.get(key) ?? null, setItem: (key, value) => isolated.set(key, value) } })
+  const student = repository.join('DEMO', 'SOFT1', 'Aluno Soft Delete')
+  const opened = repository.openAttempt(student.id, activity01)
+  const second = {
+    id: 'document-second',
+    name: 'Documento 2',
+    content: activity01.initialContent,
+    preset: activity01.defaultDocumentPreset,
+    revision: 0,
+    updatedAt: opened.updatedAt,
+  }
+  const saved = repository.saveAttempt({ ...opened, documents: [...opened.documents, second], activeDocumentId: second.id })
+  const verified = repository.verifyDocument(saved, activity01, second.id)
+  assert.equal(
+    verified.verificationRuns.at(-1)?.documentRevision,
+    verified.documents.find((document) => document.id === second.id)?.revision,
+  )
+  const deleted = repository.deleteDocument(verified, second.id)
+
+  assert.equal(deleted.documents.filter((document) => !document.deletedAt).length, 1)
+  assert.ok(deleted.documents.find((document) => document.id === second.id)?.deletedAt)
+  assert.ok(
+    (deleted.documents.find((document) => document.id === second.id)?.revision ?? 0) >
+      (verified.documents.find((document) => document.id === second.id)?.revision ?? 0),
+  )
+  assert.equal(deleted.verificationRuns.length, verified.verificationRuns.length)
+
+  const reloaded = repository.openAttempt(student.id, activity01)
+  assert.equal(reloaded.documents.some((document) => document.id === second.id), false)
+  const teacherAttempt = repository.dashboard(student.classId).attempts.find((attempt) => attempt.id === opened.id)
+  assert.ok(teacherAttempt?.documents.find((document) => document.id === second.id)?.deletedAt)
+  assert.equal(teacherAttempt?.verificationRuns.length, verified.verificationRuns.length)
+})
+
+test('não permite excluir o único documento ativo', () => {
+  const isolated = new Map<string, string>()
+  const repository = new LocalPlatformRepository({ storage: { getItem: (key) => isolated.get(key) ?? null, setItem: (key, value) => isolated.set(key, value) } })
+  const student = repository.join('DEMO', 'ONLY1', 'Aluno Documento Único')
+  const attempt = repository.openAttempt(student.id, activity01)
+  assert.throws(
+    () => repository.deleteDocument(attempt, attempt.activeDocumentId),
+    /pelo menos um documento/,
+  )
+})
+
+test('dashboard demo isola atividades pela turma selecionada', () => {
+  const isolated = new Map<string, string>()
+  const repository = new LocalPlatformRepository({ storage: { getItem: (key) => isolated.get(key) ?? null, setItem: (key, value) => isolated.set(key, value) } })
+  const classroom = repository.createClass('Turma B', 'TURMAB')
+  const activity = { ...structuredClone(activity01), id: 'activity-turma-b', slug: 'atividade-turma-b', title: 'Atividade exclusiva B' }
+  repository.createActivity(activity, classroom.id)
+
+  assert.deepEqual(repository.dashboard(classroom.id).activities.map((item) => item.id), [activity.id])
+  assert.equal(repository.dashboard('class-demo').activities.some((item) => item.id === activity.id), false)
+})

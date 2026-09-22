@@ -46,8 +46,11 @@ const authenticatedHandler = withSupabase(
         { data: activity, error: activityError },
       ] = await Promise.all([
         ctx.supabase.from("documents").select(
-          "id,attempt_id,content_json,preset",
-        ).eq("id", documentId).eq("attempt_id", attemptId).single(),
+          "id,attempt_id,content_json,preset,revision",
+        ).eq("id", documentId).eq("attempt_id", attemptId).is(
+          "deleted_at",
+          null,
+        ).single(),
         ctx.supabase.from("activities").select("config").eq(
           "id",
           attempt.activity_id,
@@ -81,6 +84,7 @@ const authenticatedHandler = withSupabase(
           p_auth_user_id: userId,
           p_attempt_id: attemptId,
           p_document_id: documentId,
+          p_document_revision: document.revision,
           p_score: score,
           p_results: results,
         },

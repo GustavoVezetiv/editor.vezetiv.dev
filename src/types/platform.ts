@@ -51,6 +51,7 @@ export interface VerificationRun {
   documentId: string
   score: number
   results: CheckResult[]
+  documentRevision: number
   createdAt: string
 }
 

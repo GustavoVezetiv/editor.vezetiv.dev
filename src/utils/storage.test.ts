@@ -37,6 +37,7 @@ test('retorna o resultado de falha ao salvar sem deixar a aplicação lançar er
       name: 'Documento 1',
       content: activity01.initialContent,
       preset: 'academic-abnt',
+      revision: 0,
       updatedAt: '2026-01-01T00:00:00.000Z',
     }],
     savedAt: '2026-01-01T00:00:00.000Z',

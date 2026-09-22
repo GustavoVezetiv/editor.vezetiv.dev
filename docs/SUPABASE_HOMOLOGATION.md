@@ -30,6 +30,10 @@ values ('UUID_DO_PROFESSOR_A', 'Professor A', true);
 | Ranking privado | Invocar `get_activity_ranking` como Aluno A | Somente Top 5 + A; sem IDs ou tentativas |
 | Fora da janela | Invocar `start_attempt` para atividade indisponível | Erro genérico; nenhuma tentativa criada |
 | Imutabilidade | Concluir e tentar alterar tentativa/documento | Negado; score e conteúdo permanecem |
+| Soft delete | Excluir uma de duas abas, recarregar como aluno e consultar como professor | A aba não reaparece para o aluno; professor vê “Excluído” e o histórico permanece |
+| Último documento | Tentar excluir a única aba ativa | Operação negada e `active_document_id` permanece válido |
+| Revisão | Verificar, editar novamente e recarregar | Documento fica alterado porque `revision` difere de `document_revision`, independentemente dos timestamps |
+| Serialização | Disparar save lento, verificar e concluir em sequência | Backend observa a mesma ordem; verificação termina antes da conclusão |
 | Rebind | Entrar em outro navegador com o mesmo código | Nova sessão assume; sessão anterior perde acesso por RLS |
 | Reset | Professor redefine o código e a sessão anterior consulta dados | Acesso anterior negado; só o novo código funciona |
 | Bootstrap | Professor provisionado sem turma chama `create_class_for_teacher` | Primeira turma criada |

@@ -11,3 +11,8 @@ test('builder não oferece modo live e compatibilidade remota normaliza para man
   assert.doesNotMatch(panel, /Atualizado automaticamente/i)
   assert.match(remote, /verificationMode:\s*["']manual["']/)
 })
+
+test('builder reinicia sua sessão ao trocar de turma', () => {
+  const teacherPage = readFileSync(new URL('./TeacherPage.tsx', import.meta.url), 'utf8')
+  assert.match(teacherPage, /<ActivityBuilder\s+key=\{selectedClassId\}/)
+})

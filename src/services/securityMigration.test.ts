@@ -4,8 +4,11 @@ import test from 'node:test'
 
 const sql = readFileSync(new URL('../../supabase/migrations/20260920202904_secure_auth_and_class_management.sql', import.meta.url), 'utf8')
 const integritySql = readFileSync(new URL('../../supabase/migrations/20260921035336_authoritative_verification_and_teacher_profiles.sql', import.meta.url), 'utf8')
+const consistencySql = readFileSync(new URL('../../supabase/migrations/20260921224245_document_soft_delete_and_revision.sql', import.meta.url), 'utf8')
 const edge = readFileSync(new URL('../../supabase/functions/verify-document/index.ts', import.meta.url), 'utf8')
 const workspace = readFileSync(new URL('../activity/ActivityWorkspace.tsx', import.meta.url), 'utf8')
+const verificationPanel = readFileSync(new URL('../verification/VerificationPanel.tsx', import.meta.url), 'utf8')
+const activityPanel = readFileSync(new URL('../activity/ActivityPanel.tsx', import.meta.url), 'utf8')
 const repository = readFileSync(new URL('./supabasePlatformRepository.ts', import.meta.url), 'utf8')
 
 test('migração restringe códigos, ranking e RPCs administrativas', () => {
@@ -26,10 +29,22 @@ test('score e conclusão oficiais não aceitam escrita direta do aluno', () => {
 
 test('Edge Function deriva score do documento oficial e ignora payload de score', () => {
   assert.match(edge, /import \{ verifyActivity \} from ["']\.\.\/\.\.\/\.\.\/src\/verification\/verifyActivity\.ts["']/)
-  assert.match(edge, /select\(\s*"id,attempt_id,content_json,preset",?\s*\)/)
+  assert.match(edge, /select\(\s*"id,attempt_id,content_json,preset,revision",?\s*\)/)
   assert.match(edge, /verifyActivity\(\s*document\.content_json,\s*officialActivity,\s*document\.preset,?\s*\)/)
   assert.match(edge, /const score = results\.reduce/)
   assert.doesNotMatch(edge, /payload\.(score|results|content|activity)/)
+})
+
+test('soft delete e revision são controlados por RPCs explícitas', () => {
+  assert.match(consistencySql, /add column deleted_at timestamptz/i)
+  assert.match(consistencySql, /add column revision integer not null default 0/i)
+  assert.match(consistencySql, /add column document_revision integer/i)
+  assert.match(consistencySql, /create or replace function public\.delete_document/i)
+  assert.match(consistencySql, /set deleted_at = now\(\),\s*revision = d\.revision \+ 1/i)
+  assert.match(consistencySql, /'document_deleted'/i)
+  assert.doesNotMatch(consistencySql, /delete\s+from\s+public\.documents/i)
+  assert.match(consistencySql, /revoke insert, update, delete on public\.documents from authenticated/i)
+  assert.match(edge, /p_document_revision: document\.revision/)
 })
 
 test('preview local e verificação oficial permanecem fluxos separados', () => {
@@ -37,6 +52,21 @@ test('preview local e verificação oficial permanecem fluxos separados', () => 
   assert.match(repository, /functions\.invoke\(["']verify-document["']/)
   assert.match(repository, /body:\s*\{\s*attemptId:\s*attempt\.id,\s*documentId\s*\}/)
   assert.doesNotMatch(repository, /body:\s*\{[^}]*\b(score|results)\b/)
+})
+
+test('estado visual distingue falha oficial de sincronização pendente', () => {
+  assert.match(workspace, /"verification-error"/)
+  assert.match(workspace, /setVerificationState\("verification-error"\)/)
+  assert.match(
+    verificationPanel,
+    /Não foi possível confirmar a verificação\. Tente novamente\./,
+  )
+  assert.match(verificationPanel, /Prévia local não oficial deste documento\./)
+  assert.match(activityPanel, /disabled=\{isCompleted \|\| officialOperationInProgress\}/)
+  assert.doesNotMatch(
+    workspace.match(/const verify = useCallback\([\s\S]*?\n\s+}, \[activity/)?.[0] ?? '',
+    /setSaveState\("retrying"\)/,
+  )
 })
 
 test('rebind e bootstrap docente são decisões explícitas da migration', () => {

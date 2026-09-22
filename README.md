@@ -36,7 +36,7 @@ VITE_SUPABASE_ANON_KEY=
 VITE_APP_MODE=supabase
 ```
 
-A migração inicial está em [supabase/migrations/20260919000000_learning_platform.sql](supabase/migrations/20260919000000_learning_platform.sql). As migrações seguintes são incrementais; a mais recente adiciona score oficial server-side, operações explícitas de tentativa, códigos com aproximadamente 60 bits e `teacher_profiles`. Todas as tabelas expostas têm RLS habilitado e grants explícitos.
+A migração inicial está em [supabase/migrations/20260919000000_learning_platform.sql](supabase/migrations/20260919000000_learning_platform.sql). As migrações seguintes são incrementais; as mais recentes adicionam score oficial server-side, operações explícitas de tentativa, códigos com aproximadamente 60 bits, `teacher_profiles`, soft delete de documentos e revisão determinística. Todas as tabelas expostas têm RLS habilitado e grants explícitos.
 
 O modo é explícito. `VITE_APP_MODE=demo` nunca consulta Supabase; `VITE_APP_MODE=supabase` exige URL e chave pública válidas e não faz fallback silencioso. Professores precisam existir no Auth e ter um `teacher_profiles.active = true`; assim podem criar sua primeira turma, que passa a ser vinculada por `classes.teacher_id`. Estudantes são pré-cadastrados pelo professor e vinculados à sessão anônima no primeiro acesso válido.
 

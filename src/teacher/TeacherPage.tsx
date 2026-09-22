@@ -397,10 +397,15 @@ export function TeacherPage(props: TeacherPageProps) {
                   >
                     {selected.documents.map((item) => (
                       <option key={item.id} value={item.id}>
-                        {item.name}
+                        {item.name}{item.deletedAt ? " (Excluído)" : ""}
                       </option>
                     ))}
                   </select>
+                ) : null}
+                {activeDocument?.deletedAt ? (
+                  <p className="verification-pending">
+                    Documento excluído pelo aluno; mantido somente para o histórico pedagógico.
+                  </p>
                 ) : null}
                 <ReadOnlyDocument document={activeDocument} />
                 <h3>Verificações</h3>
@@ -436,6 +441,7 @@ export function TeacherPage(props: TeacherPageProps) {
         </div>
         {selectedClassId ? (
           <ActivityBuilder
+            key={selectedClassId}
             activities={dashboard.activities}
             classId={selectedClassId}
             onCreate={props.onCreateActivity}

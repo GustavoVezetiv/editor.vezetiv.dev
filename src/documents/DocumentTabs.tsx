@@ -11,6 +11,7 @@ interface DocumentTabsProps {
   onExport: (format: 'docx' | 'pdf') => void
   exportingFormat: 'docx' | 'pdf' | null
   readOnly?: boolean
+  operationsDisabled?: boolean
 }
 
 export function DocumentTabs({
@@ -24,6 +25,7 @@ export function DocumentTabs({
   onExport,
   exportingFormat,
   readOnly = false,
+  operationsDisabled = false,
 }: DocumentTabsProps) {
   const activeDocument = documents.find((document) => document.id === activeDocumentId) ?? documents[0]
 
@@ -37,11 +39,12 @@ export function DocumentTabs({
               role="tab"
               aria-selected={document.id === activeDocumentId}
               type="button"
+              disabled={operationsDisabled}
               onClick={() => onSelect(document.id)}
             >
               {document.name}
             </button>
-            {document.id === activeDocumentId && !readOnly && (
+            {document.id === activeDocumentId && !readOnly && !operationsDisabled && (
               <span className="tab-actions">
                 <button type="button" className="tab-icon-button" aria-label="Renomear documento" title="Renomear documento" onClick={() => onRename(document.id)}>✎</button>
                 <button type="button" className="tab-icon-button" aria-label="Fechar documento" title="Fechar documento" onClick={() => onClose(document.id)}>×</button>
@@ -49,13 +52,13 @@ export function DocumentTabs({
             )}
           </div>
         ))}
-        {!readOnly && <button className="new-document-button" type="button" aria-label="Novo documento" title="Novo documento" onClick={onCreate}>+</button>}
+        {!readOnly && !operationsDisabled && <button className="new-document-button" type="button" aria-label="Novo documento" title="Novo documento" onClick={onCreate}>+</button>}
       </div>
 
       <div className="document-control-actions">
         <label className="preset-control">
           <span>Formato</span>
-          <select value={activeDocument.preset} onChange={(event) => onPresetChange(event.target.value as DocumentPreset)} aria-label="Preset do documento" disabled={readOnly}>
+          <select value={activeDocument.preset} onChange={(event) => onPresetChange(event.target.value as DocumentPreset)} aria-label="Preset do documento" disabled={readOnly || operationsDisabled}>
             <option value="academic-abnt">Acadêmico (ABNT)</option>
             <option value="normal">Normal</option>
           </select>

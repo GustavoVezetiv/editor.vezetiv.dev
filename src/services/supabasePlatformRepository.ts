@@ -13,6 +13,7 @@ import type {
 } from "../types/platform";
 import type { PedagogicalEvent } from "../events/pedagogicalEvents";
 import type { PlatformRepository, SavedAttempt } from "./platformRepository";
+import { AttemptOperationQueue } from "./attemptOperationQueue";
 
 const OUTBOX_KEY = "editor-vezetiv:supabase-outbox:v2";
 const clone = <T>(value: T): T =>
@@ -72,6 +73,8 @@ const documentFromRow = (row: Row): ActivityDocument => ({
   name: String(row.name),
   content: row.content_json as ActivityDocument["content"],
   preset: row.preset as ActivityDocument["preset"],
+  revision: Number(row.revision ?? 0),
+  deletedAt: row.deleted_at ? String(row.deleted_at) : undefined,
   updatedAt: String(row.updated_at),
 });
 const runFromRow = (row: Row): VerificationRun => ({
@@ -80,6 +83,7 @@ const runFromRow = (row: Row): VerificationRun => ({
   documentId: String(row.document_id),
   score: Number(row.score),
   results: row.results_json as VerificationRun["results"],
+  documentRevision: Number(row.document_revision ?? 0),
   createdAt: String(row.created_at),
 });
 const eventFromRow = (
@@ -95,18 +99,29 @@ const eventFromRow = (
   metadata: row.metadata as Record<string, unknown>,
   timestamp: String(row.created_at),
 });
-function attemptFromRows(
+export function attemptFromRows(
   row: Row,
   documentRows: Row[],
   runRows: Row[],
   eventRows: Row[],
+  includeDeletedDocuments = false,
 ): ActivityAttempt {
   const documents = documentRows
-    .filter((document) => document.attempt_id === row.id)
+    .filter(
+      (document) =>
+        document.attempt_id === row.id &&
+        (includeDeletedDocuments || !document.deleted_at),
+    )
     .map(documentFromRow);
-  const activeDocumentId = String(
-    row.active_document_id ?? documents[0]?.id ?? "",
-  );
+  const requestedActiveDocumentId = String(row.active_document_id ?? "");
+  const activeDocumentId = documents.some(
+    (document) =>
+      document.id === requestedActiveDocumentId && !document.deletedAt,
+  )
+    ? requestedActiveDocumentId
+    : (documents.find((document) => !document.deletedAt)?.id ??
+      documents[0]?.id ??
+      "");
   return {
     id: String(row.id),
     studentId: String(row.student_id),
@@ -122,11 +137,19 @@ function attemptFromRows(
     activeDocumentId,
     verificationRuns: runRows
       .filter((run) => run.attempt_id === row.id)
-      .map(runFromRow),
+      .map(runFromRow)
+      .sort(
+        (a, b) =>
+          a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+      ),
     events: eventRows
       .filter((event) => event.attempt_id === row.id)
       .map((event) =>
         eventFromRow(event, activeDocumentId, String(row.activity_id)),
+      )
+      .sort(
+        (a, b) =>
+          a.timestamp.localeCompare(b.timestamp) || a.id.localeCompare(b.id),
       ),
     updatedAt: String(row.updated_at ?? row.completed_at ?? row.started_at),
   };
@@ -134,6 +157,7 @@ function attemptFromRows(
 
 export class SupabasePlatformRepository implements PlatformRepository {
   readonly mode = "supabase" as const;
+  private readonly mutations = new AttemptOperationQueue();
   constructor(
     private readonly client: SupabaseClient,
     private readonly storage: Storage = localStorage,
@@ -163,6 +187,11 @@ export class SupabasePlatformRepository implements PlatformRepository {
       ...this.readOutbox().filter((item) => item.id !== attempt.id),
       clone(attempt),
     ]);
+  }
+  private clearOutbox(attemptId: string): void {
+    this.writeOutbox(
+      this.readOutbox().filter((attempt) => attempt.id !== attemptId),
+    );
   }
 
   async listAssignedActivities(student: Student): Promise<AssignedActivity[]> {
@@ -228,26 +257,50 @@ export class SupabasePlatformRepository implements PlatformRepository {
     if (error) throw new Error(error.message);
     return data ? studentFromRow(data as Row) : undefined;
   }
-  private async loadAttempts(query: QueryLike): Promise<ActivityAttempt[]> {
+  private async loadAttempts(
+    query: QueryLike,
+    includeDeletedDocuments = false,
+  ): Promise<ActivityAttempt[]> {
     const attempts = await this.rows("attempts", query);
     if (!attempts.length) return [];
     const ids = attempts.map((row) => row.id);
     const [documents, runs, events] = await Promise.all([
       this.rows(
         "documents",
-        this.client.from("documents").select("*").in("attempt_id", ids),
+        this.client
+          .from("documents")
+          .select("*")
+          .in("attempt_id", ids)
+          .order("updated_at", { ascending: true })
+          .order("id", { ascending: true }),
       ),
       this.rows(
         "verification_runs",
-        this.client.from("verification_runs").select("*").in("attempt_id", ids),
+        this.client
+          .from("verification_runs")
+          .select("*")
+          .in("attempt_id", ids)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true }),
       ),
       this.rows(
         "activity_events",
-        this.client.from("activity_events").select("*").in("attempt_id", ids),
+        this.client
+          .from("activity_events")
+          .select("*")
+          .in("attempt_id", ids)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true }),
       ),
     ]);
     return attempts.map((attempt) =>
-      attemptFromRows(attempt, documents, runs, events),
+      attemptFromRows(
+        attempt,
+        documents,
+        runs,
+        events,
+        includeDeletedDocuments,
+      ),
     );
   }
   async listStudentAttempts(studentId: string): Promise<ActivityAttempt[]> {
@@ -304,19 +357,20 @@ export class SupabasePlatformRepository implements PlatformRepository {
       .eq("id", attempt.id)
       .maybeSingle();
     if (existing?.status === "completed") return;
-    // Child rows must be persisted while the attempt is still open. Once the
-    // final update marks it completed, RLS intentionally makes it immutable.
-    const documents = await this.client.from("documents").upsert(
-      attempt.documents.map((document) => ({
-        id: document.id,
-        attempt_id: attempt.id,
-        name: document.name,
-        content_json: document.content,
-        preset: document.preset,
-        updated_at: document.updatedAt,
-      })),
-    );
-    if (documents.error) throw new Error(documents.error.message);
+    // Revisions and timestamps are assigned by save_document. The browser
+    // never writes revision/deleted_at directly.
+    for (const document of attempt.documents.filter(
+      (item) => !item.deletedAt,
+    )) {
+      const savedDocument = await this.client.rpc("save_document", {
+        p_attempt_id: attempt.id,
+        p_document_id: document.id,
+        p_name: document.name,
+        p_content_json: document.content,
+        p_preset: document.preset,
+      });
+      if (savedDocument.error) throw new Error(savedDocument.error.message);
+    }
     const clientEvents = attempt.events.filter(
       (event) =>
         ![
@@ -325,6 +379,7 @@ export class SupabasePlatformRepository implements PlatformRepository {
           "verification_completed",
           "requirement_passed",
           "activity_completed",
+          "document_deleted",
         ].includes(event.type),
     );
     if (clientEvents.length) {
@@ -348,59 +403,86 @@ export class SupabasePlatformRepository implements PlatformRepository {
     if (savedAttempt.error) throw new Error(savedAttempt.error.message);
   }
   async saveAttempt(attempt: ActivityAttempt): Promise<SavedAttempt> {
-    try {
-      await this.retryPending();
-      await this.persistAttempt(attempt);
-      this.writeOutbox(
-        this.readOutbox().filter((item) => item.id !== attempt.id),
-      );
-      return { attempt, remoteState: "synced" };
-    } catch (error) {
-      if (error instanceof Error && error.message === "DEPENDENCY_MISSING")
-        return { attempt, remoteState: "blocked" };
-      this.enqueue(attempt);
-      return { attempt, remoteState: "retrying" };
-    }
+    return this.mutations.run(attempt.id, async () => {
+      try {
+        await this.persistAttempt(attempt);
+        this.clearOutbox(attempt.id);
+        return {
+          attempt: await this.loadAttempt({ id: attempt.id }),
+          remoteState: "synced",
+        };
+      } catch (error) {
+        if (error instanceof Error && error.message === "DEPENDENCY_MISSING")
+          return { attempt, remoteState: "blocked" };
+        this.enqueue(attempt);
+        return { attempt, remoteState: "retrying" };
+      }
+    });
   }
   async verifyDocument(
     attempt: ActivityAttempt,
     _activity: Activity,
     documentId: string,
   ): Promise<SavedAttempt> {
-    await this.persistAttempt(attempt);
-    const { error } = await this.client.functions.invoke("verify-document", {
-      body: { attemptId: attempt.id, documentId },
+    return this.mutations.run(attempt.id, async () => {
+      await this.persistAttempt(attempt);
+      this.clearOutbox(attempt.id);
+      const { error } = await this.client.functions.invoke("verify-document", {
+        body: { attemptId: attempt.id, documentId },
+      });
+      if (error) throw new Error(error.message);
+      return {
+        attempt: await this.loadAttempt({ id: attempt.id }),
+        remoteState: "synced",
+      };
     });
-    if (error) throw new Error(error.message);
-    return {
-      attempt: await this.loadAttempt({ id: attempt.id }),
-      remoteState: "synced",
-    };
+  }
+  async deleteDocument(
+    attempt: ActivityAttempt,
+    documentId: string,
+  ): Promise<SavedAttempt> {
+    return this.mutations.run(attempt.id, async () => {
+      await this.persistAttempt(attempt);
+      this.clearOutbox(attempt.id);
+      const { error } = await this.client.rpc("delete_document", {
+        p_document_id: documentId,
+      });
+      if (error) throw new Error(error.message);
+      return {
+        attempt: await this.loadAttempt({ id: attempt.id }),
+        remoteState: "synced",
+      };
+    });
   }
   async completeAttempt(attempt: ActivityAttempt): Promise<SavedAttempt> {
-    await this.persistAttempt(attempt);
-    const { error } = await this.client.rpc("complete_attempt", {
-      p_attempt_id: attempt.id,
-      p_document_id: attempt.activeDocumentId,
+    return this.mutations.run(attempt.id, async () => {
+      await this.persistAttempt(attempt);
+      this.clearOutbox(attempt.id);
+      const { error } = await this.client.rpc("complete_attempt", {
+        p_attempt_id: attempt.id,
+        p_document_id: attempt.activeDocumentId,
+      });
+      if (error) throw new Error(error.message);
+      return {
+        attempt: await this.loadAttempt({ id: attempt.id }),
+        remoteState: "synced",
+      };
     });
-    if (error) throw new Error(error.message);
-    return {
-      attempt: await this.loadAttempt({ id: attempt.id }),
-      remoteState: "synced",
-    };
   }
   async retryPending(): Promise<number> {
     const pending = this.readOutbox();
     let synced = 0;
     for (const attempt of pending.slice(0, 10)) {
       try {
-        await this.persistAttempt(attempt);
+        await this.mutations.run(attempt.id, () =>
+          this.persistAttempt(attempt),
+        );
+        this.clearOutbox(attempt.id);
         synced += 1;
       } catch {
         break;
       }
     }
-    if (synced) this.writeOutbox(pending.slice(synced));
     return synced;
   }
   async createClass(name: string, code: string): Promise<Classroom> {
@@ -508,6 +590,7 @@ export class SupabasePlatformRepository implements PlatformRepository {
     const attempts = studentIds.length
       ? await this.loadAttempts(
           this.client.from("attempts").select("*").in("student_id", studentIds),
+          true,
         )
       : [];
     const activityIds = assignments.map((row) => row.activity_id);

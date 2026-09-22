@@ -67,6 +67,44 @@ function attemptBest(attempt: ActivityAttempt): {
   return { score, reachedAt };
 }
 
+function normalizeAttempt(attempt: ActivityAttempt): ActivityAttempt {
+  const documents = attempt.documents.map((document) => ({
+    ...document,
+    revision: Number.isInteger(document.revision) ? document.revision : 0,
+  }));
+  const activeDocuments = documents.filter((document) => !document.deletedAt);
+  const activeDocumentId = activeDocuments.some(
+    (document) => document.id === attempt.activeDocumentId,
+  )
+    ? attempt.activeDocumentId
+    : (activeDocuments[0]?.id ?? attempt.activeDocumentId);
+  return {
+    ...attempt,
+    documents,
+    activeDocumentId,
+    verificationRuns: attempt.verificationRuns
+      .map((run) => ({
+        ...run,
+        documentRevision: Number.isInteger(run.documentRevision)
+          ? run.documentRevision
+          : 0,
+      }))
+      .sort(
+        (a, b) =>
+          a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+      ),
+    events: [...attempt.events].sort(
+      (a, b) =>
+        a.timestamp.localeCompare(b.timestamp) || a.id.localeCompare(b.id),
+    ),
+  };
+}
+
+const studentViewAttempt = (attempt: ActivityAttempt): ActivityAttempt => ({
+  ...attempt,
+  documents: attempt.documents.filter((document) => !document.deletedAt),
+});
+
 export function rankAttempts(
   attempts: ActivityAttempt[],
   students: Student[],
@@ -174,6 +212,7 @@ function createSeedState(): LocalPlatformState {
         ],
       },
       preset: activity.defaultDocumentPreset,
+      revision: 0,
       updatedAt: timestamp,
     };
     const attemptId = `attempt-${student.id}-${activity.id}`;
@@ -185,6 +224,7 @@ function createSeedState(): LocalPlatformState {
             documentId: document.id,
             score,
             results: [],
+            documentRevision: document.revision,
             createdAt: timestamp,
           },
         ]
@@ -263,7 +303,10 @@ export class LocalPlatformRepository {
         Array.isArray(parsed.activities) &&
         Array.isArray(parsed.classActivities)
       )
-        return parsed;
+        return {
+          ...parsed,
+          attempts: parsed.attempts.map(normalizeAttempt),
+        };
     } catch {
       /* seed below */
     }
@@ -344,7 +387,7 @@ export class LocalPlatformRepository {
     return clone(
       this.loadState().attempts.filter(
         (attempt) => attempt.studentId === studentId,
-      ),
+      ).map(studentViewAttempt),
     );
   }
   openAttempt(studentId: string, activity: Activity): ActivityAttempt {
@@ -379,6 +422,7 @@ export class LocalPlatformRepository {
         name: "Documento 1",
         content: clone(activity.initialContent),
         preset: activity.defaultDocumentPreset,
+        revision: 0,
         updatedAt: timestamp,
       };
       const attemptId = id("attempt");
@@ -405,7 +449,7 @@ export class LocalPlatformRepository {
       state.attempts.push(attempt);
       this.saveState(state);
     }
-    return clone(attempt);
+    return clone(studentViewAttempt(normalizeAttempt(attempt)));
   }
   saveAttempt(nextAttempt: ActivityAttempt): ActivityAttempt {
     const state = this.loadState();
@@ -417,7 +461,37 @@ export class LocalPlatformRepository {
       JSON.stringify(existing) !== JSON.stringify(nextAttempt)
     )
       return clone(existing);
-    const next = { ...nextAttempt, updatedAt: now() };
+    const timestamp = now();
+    const previousById = new Map(
+      (existing?.documents ?? []).map((document) => [document.id, document]),
+    );
+    const documents = nextAttempt.documents.map((document) => {
+      const previous = previousById.get(document.id);
+      if (!previous)
+        return { ...document, revision: 0, updatedAt: timestamp };
+      if (previous.deletedAt) return previous;
+      const changed =
+        previous.name !== document.name ||
+        previous.preset !== document.preset ||
+        JSON.stringify(previous.content) !== JSON.stringify(document.content);
+      return {
+        ...document,
+        revision: previous.revision + (changed ? 1 : 0),
+        updatedAt: changed ? timestamp : previous.updatedAt,
+      };
+    });
+    for (const previous of existing?.documents ?? []) {
+      if (
+        previous.deletedAt &&
+        !documents.some((document) => document.id === previous.id)
+      )
+        documents.push(previous);
+    }
+    const next = normalizeAttempt({
+      ...nextAttempt,
+      documents,
+      updatedAt: timestamp,
+    });
     const index = state.attempts.findIndex((attempt) => attempt.id === next.id);
     if (index >= 0) state.attempts[index] = clone(next);
     else state.attempts.push(clone(next));
@@ -425,23 +499,60 @@ export class LocalPlatformRepository {
     return clone(next);
   }
   verifyDocument(attempt: ActivityAttempt, activity: Activity, documentId: string): ActivityAttempt {
-    const document = attempt.documents.find((item) => item.id === documentId)
+    const savedAttempt = this.saveAttempt(attempt)
+    const document = savedAttempt.documents.find((item) => item.id === documentId && !item.deletedAt)
     if (!document) throw new Error("Documento não encontrado.")
     const results = verifyActivity(document.content, activity, document.preset)
     const score = calculateScore(activity, results).earnedPoints
     const createdAt = now()
-    const run: VerificationRun = { id: id("verification"), attemptId: attempt.id, documentId, score, results, createdAt }
-    let next: ActivityAttempt = { ...attempt, ...scoreStateFromRuns([...attempt.verificationRuns, run]), verificationRuns: [...attempt.verificationRuns, run] }
-    const events = [createPedagogicalEvent({ activityId: activity.id, attemptId: attempt.id, documentId, type: "verification_requested", metadata: {} }), createPedagogicalEvent({ activityId: activity.id, attemptId: attempt.id, documentId, type: "verification_completed", metadata: { score } })]
-    for (const requirementId of newlyPassedRequirementIds(attempt, run)) { const requirement = activity.requirements.find((item) => item.id === requirementId); events.push(createPedagogicalEvent({ activityId: activity.id, attemptId: attempt.id, documentId, type: "requirement_passed", metadata: { requirementId, label: requirement?.label } })) }
+    const run: VerificationRun = { id: id("verification"), attemptId: savedAttempt.id, documentId, score, results, documentRevision: document.revision, createdAt }
+    let next: ActivityAttempt = { ...savedAttempt, ...scoreStateFromRuns([...savedAttempt.verificationRuns, run]), verificationRuns: [...savedAttempt.verificationRuns, run] }
+    const events = [createPedagogicalEvent({ activityId: activity.id, attemptId: savedAttempt.id, documentId, type: "verification_requested", metadata: {} }), createPedagogicalEvent({ activityId: activity.id, attemptId: savedAttempt.id, documentId, type: "verification_completed", metadata: { score } })]
+    for (const requirementId of newlyPassedRequirementIds(savedAttempt, run)) { const requirement = activity.requirements.find((item) => item.id === requirementId); events.push(createPedagogicalEvent({ activityId: activity.id, attemptId: savedAttempt.id, documentId, type: "requirement_passed", metadata: { requirementId, label: requirement?.label } })) }
     next = { ...next, events: [...next.events, ...events], updatedAt: createdAt }
     return this.saveAttempt(next)
   }
+  deleteDocument(attempt: ActivityAttempt, documentId: string): ActivityAttempt {
+    const savedAttempt = this.saveAttempt(attempt);
+    const activeDocuments = savedAttempt.documents.filter(
+      (document) => !document.deletedAt,
+    );
+    const document = activeDocuments.find((item) => item.id === documentId);
+    if (!document) throw new Error("Documento não encontrado.");
+    if (activeDocuments.length <= 1)
+      throw new Error("A tentativa precisa manter pelo menos um documento.");
+    const timestamp = now();
+    const fallback = activeDocuments.find((item) => item.id !== documentId)!;
+    const next = normalizeAttempt({
+      ...savedAttempt,
+      documents: savedAttempt.documents.map((item) =>
+        item.id === documentId
+          ? {
+              ...item,
+              revision: item.revision + 1,
+              deletedAt: timestamp,
+              updatedAt: timestamp,
+            }
+          : item,
+      ),
+      activeDocumentId:
+        savedAttempt.activeDocumentId === documentId
+          ? fallback.id
+          : savedAttempt.activeDocumentId,
+      updatedAt: timestamp,
+    });
+    const state = this.loadState();
+    const index = state.attempts.findIndex((item) => item.id === next.id);
+    if (index >= 0) state.attempts[index] = clone(next);
+    this.saveState(state);
+    return clone(next);
+  }
   completeAttempt(attempt: ActivityAttempt): ActivityAttempt {
-    if (attempt.status === "completed") return attempt
+    const savedAttempt = this.saveAttempt(attempt)
+    if (savedAttempt.status === "completed") return savedAttempt
     const completedAt = now()
-    const event = createPedagogicalEvent({ activityId: attempt.activityId, attemptId: attempt.id, documentId: attempt.activeDocumentId, type: "activity_completed", metadata: {} })
-    return this.saveAttempt({ ...attempt, status: "completed", completedAt, updatedAt: completedAt, events: [...attempt.events, event] })
+    const event = createPedagogicalEvent({ activityId: savedAttempt.activityId, attemptId: savedAttempt.id, documentId: savedAttempt.activeDocumentId, type: "activity_completed", metadata: {} })
+    return this.saveAttempt({ ...savedAttempt, status: "completed", completedAt, updatedAt: completedAt, events: [...savedAttempt.events, event] })
   }
   createClass(name: string, code: string): Classroom {
     const state = this.loadState();
@@ -556,10 +667,17 @@ export class LocalPlatformRepository {
     const assignments = classId
       ? state.classActivities.filter((item) => item.classId === classId)
       : state.classActivities;
+    const assignedActivityIds = new Set(
+      assignments.map((assignment) => assignment.activityId),
+    );
     return {
       classes: clone(state.classes),
       students: clone(students),
-      activities: clone(this.allActivities(state)),
+      activities: clone(
+        this.allActivities(state).filter((activity) =>
+          assignedActivityIds.has(activity.id),
+        ),
+      ),
       classActivities: clone(assignments),
       attempts: clone(attempts),
       averageScore: attempts.length

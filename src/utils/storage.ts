@@ -9,11 +9,20 @@ function isDocument(value: unknown): value is ActivityDocument {
   return typeof document.id === 'string'
     && typeof document.name === 'string'
     && typeof document.updatedAt === 'string'
+    && (document.revision === undefined || typeof document.revision === 'number')
     && (document.preset === 'academic-abnt' || document.preset === 'normal')
     && typeof document.content === 'object'
     && document.content !== null
     && document.content.type === 'doc'
 }
+
+const normalizeSavedActivity = (saved: SavedActivity): SavedActivity => ({
+  ...saved,
+  documents: saved.documents.map((document) => ({
+    ...document,
+    revision: Number.isInteger(document.revision) ? document.revision : 0,
+  })),
+})
 
 function isSavedActivity(value: unknown, activityId: string): value is SavedActivity {
   if (typeof value !== 'object' || value === null) return false
@@ -45,6 +54,7 @@ function migrateLegacyActivity(value: unknown, activity: Activity): SavedActivit
       name: 'Documento 1',
       content: legacy.content as JSONContent,
       preset: activity.defaultDocumentPreset,
+      revision: 0,
       updatedAt: legacy.savedAt,
     }],
     savedAt: legacy.savedAt,
@@ -62,7 +72,7 @@ function migrateWorkspaceWithoutAttempt(value: unknown, activityId: string): Sav
     || !workspace.documents.every(isDocument)
     || !workspace.documents.some((document) => document.id === workspace.activeDocumentId)) return null
 
-  return { ...workspace, attemptId: 'attempto-local-legado' } as SavedActivity
+  return normalizeSavedActivity({ ...workspace, attemptId: 'attempto-local-legado' } as SavedActivity)
 }
 
 export function loadSavedActivity(activity: Activity): SavedActivity | null {
@@ -72,7 +82,7 @@ export function loadSavedActivity(activity: Activity): SavedActivity | null {
 
     const saved: unknown = JSON.parse(raw)
     return isSavedActivity(saved, activity.id)
-      ? saved
+      ? normalizeSavedActivity(saved)
       : migrateWorkspaceWithoutAttempt(saved, activity.id) ?? migrateLegacyActivity(saved, activity)
   } catch {
     return null

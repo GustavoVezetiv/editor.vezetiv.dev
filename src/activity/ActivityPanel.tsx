@@ -6,15 +6,17 @@ interface ActivityPanelProps {
   activity: Activity
   results: CheckResult[] | null
   resultSource: 'preview' | 'official' | null
+  verificationState: 'idle' | 'verifying' | 'verified' | 'verification-error'
   hasUnverifiedChanges: boolean
   onVerify: () => void
   onHintOpened: (requirementId: string) => void
   onHintChanged?: (requirementId: string | null) => void
   onComplete: () => void
   isCompleted: boolean
+  officialOperationInProgress: boolean
 }
 
-export function ActivityPanel({ activity, results, resultSource, hasUnverifiedChanges, onVerify, onHintOpened, onHintChanged, onComplete, isCompleted }: ActivityPanelProps) {
+export function ActivityPanel({ activity, results, resultSource, verificationState, hasUnverifiedChanges, onVerify, onHintOpened, onHintChanged, onComplete, isCompleted, officialOperationInProgress }: ActivityPanelProps) {
   return (
     <aside className="activity-panel" aria-labelledby="activity-title">
       <div className="activity-scroll">
@@ -42,6 +44,7 @@ export function ActivityPanel({ activity, results, resultSource, hasUnverifiedCh
       <VerificationPanel
         results={results}
         resultSource={resultSource}
+        verificationState={verificationState}
         hasUnverifiedChanges={hasUnverifiedChanges}
         onVerify={onVerify}
         activity={activity}
@@ -49,7 +52,7 @@ export function ActivityPanel({ activity, results, resultSource, hasUnverifiedCh
         onHintChanged={onHintChanged}
         readOnly={isCompleted}
       />
-      <button className="complete-button" type="button" onClick={onComplete} disabled={isCompleted}>
+      <button className="complete-button" type="button" onClick={onComplete} disabled={isCompleted || officialOperationInProgress}>
         {isCompleted ? 'Atividade concluída' : 'Concluir atividade'}
       </button>
     </aside>

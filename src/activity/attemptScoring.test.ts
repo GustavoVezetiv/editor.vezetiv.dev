@@ -3,7 +3,7 @@ import test from 'node:test'
 import type { VerificationRun } from '../types/platform'
 import { bestVerificationRun, completionScore, scoreStateFromRuns } from './attemptScoring'
 
-const run = (id: string, documentId: string, score: number, createdAt: string): VerificationRun => ({ id, attemptId: 'attempt', documentId, score, results: [], createdAt })
+const run = (id: string, documentId: string, score: number, createdAt: string): VerificationRun => ({ id, attemptId: 'attempt', documentId, score, results: [], documentRevision: 0, createdAt })
 
 test('mantém o maior score entre documentos da tentativa', () => {
   const state = scoreStateFromRuns([

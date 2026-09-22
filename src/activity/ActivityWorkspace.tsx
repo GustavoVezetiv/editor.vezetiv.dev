@@ -30,6 +30,7 @@ interface ActivityWorkspaceProps {
   initialAttempt: ActivityAttempt;
   onSaveAttempt: (attempt: ActivityAttempt) => Promise<SavedAttempt>;
   onVerifyDocument: (attempt: ActivityAttempt, activity: Activity, documentId: string) => Promise<SavedAttempt>;
+  onDeleteDocument: (attempt: ActivityAttempt, documentId: string) => Promise<SavedAttempt>;
   onCompleteAttempt: (attempt: ActivityAttempt) => Promise<SavedAttempt>;
   onBack: () => void;
 }
@@ -43,6 +44,7 @@ export function ActivityWorkspace({
   initialAttempt,
   onSaveAttempt,
   onVerifyDocument,
+  onDeleteDocument,
   onCompleteAttempt,
   onBack,
 }: ActivityWorkspaceProps) {
@@ -57,13 +59,28 @@ export function ActivityWorkspace({
   );
   const [completionOpen, setCompletionOpen] = useState(false);
   const [previewResults, setPreviewResults] = useState<CheckResult[] | null>(null);
+  const [verificationState, setVerificationState] = useState<
+    "idle" | "verifying" | "verified" | "verification-error"
+  >(
+    initialAttempt.verificationRuns.some(
+      (run) => run.documentId === initialAttempt.activeDocumentId,
+    )
+      ? "verified"
+      : "idle",
+  );
+  const [officialOperation, setOfficialOperation] = useState<
+    "verifying" | "deleting" | "completing" | null
+  >(null);
   const timer = useRef<number | null>(null);
   const attemptRef = useRef(attempt);
   const saveRevision = useRef(0);
+  const activeDocuments = attempt.documents.filter(
+    (document) => !document.deletedAt,
+  );
   const activeDocument =
-    attempt.documents.find(
+    activeDocuments.find(
       (document) => document.id === attempt.activeDocumentId,
-    ) ?? attempt.documents[0];
+    ) ?? activeDocuments[0];
   const latestRun = [...attempt.verificationRuns]
     .reverse()
     .find((run) => run.documentId === activeDocument.id);
@@ -138,11 +155,17 @@ export function ActivityWorkspace({
   const updateDocument = useCallback(
     (content: JSONContent) => {
       if (!canEditAttempt(attemptRef.current)) return;
+      setPreviewResults(null);
       const next = {
         ...attemptRef.current,
         documents: attemptRef.current.documents.map((document) =>
           document.id === attemptRef.current.activeDocumentId
-            ? { ...document, content, updatedAt: new Date().toISOString() }
+            ? {
+                ...document,
+                content,
+                revision: document.revision + 1,
+                updatedAt: new Date().toISOString(),
+              }
             : document,
         ),
       };
@@ -165,6 +188,7 @@ export function ActivityWorkspace({
   );
 
   const verify = useCallback(() => {
+    if (officialOperation) return;
     const current = attemptRef.current;
     const document = current.documents.find(
       (item) => item.id === current.activeDocumentId,
@@ -172,21 +196,35 @@ export function ActivityWorkspace({
     setPreviewResults(verifyActivity(document.content, activity, document.preset));
     if (timer.current) window.clearTimeout(timer.current);
     const revision = ++saveRevision.current;
-    setSaveState("saving");
+    setVerificationState("verifying");
+    setOfficialOperation("verifying");
     void onVerifyDocument(current, activity, document.id)
       .then((saved) => {
-        if (revision !== saveRevision.current) return;
-        attemptRef.current = saved.attempt;
-        setAttempt(saved.attempt);
-        setPreviewResults(null);
-        setSaveState(saved.remoteState);
+        setVerificationState("verified");
+        if (revision === saveRevision.current) {
+          attemptRef.current = saved.attempt;
+          setAttempt(saved.attempt);
+          setPreviewResults(null);
+          setSaveState(saved.remoteState);
+        }
       })
       .catch(() => {
-        if (revision === saveRevision.current) setSaveState("retrying");
-      });
-  }, [activity, onVerifyDocument]);
+        setVerificationState("verification-error");
+      })
+      .finally(() => setOfficialOperation(null));
+  }, [activity, officialOperation, onVerifyDocument]);
 
-  const selectDocument = (documentId: string) => { setPreviewResults(null); persist({ ...attemptRef.current, activeDocumentId: documentId }); };
+  const selectDocument = (documentId: string) => {
+    setPreviewResults(null);
+    setVerificationState(
+      attemptRef.current.verificationRuns.some(
+        (run) => run.documentId === documentId,
+      )
+        ? "verified"
+        : "idle",
+    );
+    persist({ ...attemptRef.current, activeDocumentId: documentId });
+  };
   const createDocument = () => {
     const timestamp = new Date().toISOString();
     const document: ActivityDocument = {
@@ -194,8 +232,11 @@ export function ActivityWorkspace({
       name: `Documento ${attemptRef.current.documents.length + 1}`,
       content: activity.initialContent,
       preset: activity.defaultDocumentPreset,
+      revision: 0,
       updatedAt: timestamp,
     };
+    setPreviewResults(null);
+    setVerificationState("idle");
     persist(
       withEvent(
         {
@@ -221,7 +262,12 @@ export function ActivityWorkspace({
           ...attemptRef.current,
           documents: attemptRef.current.documents.map((document) =>
             document.id === documentId
-              ? { ...document, name, updatedAt: new Date().toISOString() }
+              ? {
+                  ...document,
+                  name,
+                  revision: document.revision + 1,
+                  updatedAt: new Date().toISOString(),
+                }
               : document,
           ),
         },
@@ -234,7 +280,10 @@ export function ActivityWorkspace({
   };
   const closeDocument = (documentId: string) => {
     const current = attemptRef.current;
-    if (current.documents.length === 1) return;
+    const currentDocuments = current.documents.filter(
+      (item) => !item.deletedAt,
+    );
+    if (currentDocuments.length === 1 || officialOperation) return;
     const document = current.documents.find((item) => item.id === documentId);
     if (
       !document ||
@@ -244,31 +293,50 @@ export function ActivityWorkspace({
         ))
     )
       return;
-    const documents = current.documents.filter(
-      (item) => item.id !== documentId,
+    if (timer.current) window.clearTimeout(timer.current);
+    const revision = ++saveRevision.current;
+    const fallback = currentDocuments.find((item) => item.id !== documentId)!;
+    const requested = withEvent(
+      {
+        ...current,
+        activeDocumentId:
+          current.activeDocumentId === documentId
+            ? fallback.id
+            : current.activeDocumentId,
+      },
+      "document_deleted",
+      documentId,
     );
-    persist(
-      withEvent(
-        {
-          ...current,
-          documents,
-          activeDocumentId:
-            current.activeDocumentId === documentId
-              ? documents[0].id
-              : current.activeDocumentId,
-        },
-        "document_deleted",
-        documentId,
-      ),
-      true,
-    );
+    setOfficialOperation("deleting");
+    void onDeleteDocument(requested, documentId)
+      .then((saved) => {
+        if (revision !== saveRevision.current) return;
+        attemptRef.current = saved.attempt;
+        setAttempt(saved.attempt);
+        setPreviewResults(null);
+        setVerificationState(
+          saved.attempt.verificationRuns.some(
+            (run) => run.documentId === saved.attempt.activeDocumentId,
+          )
+            ? "verified"
+            : "idle",
+        );
+        setSaveState(saved.remoteState);
+      })
+      .catch(() => setSaveState("retrying"))
+      .finally(() => setOfficialOperation(null));
   };
   const setPreset = (preset: DocumentPreset) => {
     const next = {
       ...attemptRef.current,
       documents: attemptRef.current.documents.map((document) =>
         document.id === attemptRef.current.activeDocumentId
-          ? { ...document, preset, updatedAt: new Date().toISOString() }
+          ? {
+              ...document,
+              preset,
+              revision: document.revision + 1,
+              updatedAt: new Date().toISOString(),
+            }
           : document,
       ),
     };
@@ -300,9 +368,12 @@ export function ActivityWorkspace({
       ),
     );
   };
-  const complete = () => setCompletionOpen(true);
+  const complete = () => {
+    if (!officialOperation) setCompletionOpen(true);
+  };
   const confirmCompletion = () => {
-    setSaveState("saving");
+    if (officialOperation) return;
+    setOfficialOperation("completing");
     void onCompleteAttempt(attemptRef.current)
       .then((saved) => {
         attemptRef.current = saved.attempt;
@@ -310,7 +381,8 @@ export function ActivityWorkspace({
         setSaveState(saved.remoteState);
         setCompletionOpen(false);
       })
-      .catch(() => setSaveState("retrying"));
+      .catch(() => setSaveState("retrying"))
+      .finally(() => setOfficialOperation(null));
   };
   const hintTool = (requirementId: string | null): EditorTool | null => {
     const requirement = activity.requirements.find(
@@ -370,16 +442,18 @@ export function ActivityWorkspace({
           activity={activity}
           results={results}
           resultSource={previewResults ? "preview" : latestRun ? "official" : null}
+          verificationState={verificationState}
           hasUnverifiedChanges={isDocumentDirty(activeDocument, latestRun)}
           onVerify={verify}
           onHintOpened={openHint}
           onHintChanged={(id) => setHighlightedTool(hintTool(id))}
           onComplete={complete}
           isCompleted={readOnly}
+          officialOperationInProgress={officialOperation !== null}
         />
         <div className="editor-column">
           <DocumentTabs
-            documents={attempt.documents}
+            documents={activeDocuments}
             activeDocumentId={activeDocument.id}
             onSelect={selectDocument}
             onCreate={createDocument}
@@ -389,6 +463,7 @@ export function ActivityWorkspace({
             onExport={exportActive}
             exportingFormat={exporting}
             readOnly={readOnly}
+            operationsDisabled={officialOperation !== null}
           />
           <DocumentEditor
             key={activeDocument.id}
@@ -400,7 +475,11 @@ export function ActivityWorkspace({
             onBlockedInput={blockedPaste}
             onFormatApplied={recordFormat}
             highlightedTool={highlightedTool}
-            readOnly={readOnly}
+            readOnly={
+              readOnly ||
+              officialOperation === "deleting" ||
+              officialOperation === "completing"
+            }
           />
         </div>
       </div>
@@ -449,7 +528,11 @@ export function ActivityWorkspace({
               >
                 Continuar editando
               </button>
-              <button className="complete-button" onClick={confirmCompletion}>
+              <button
+                className="complete-button"
+                onClick={confirmCompletion}
+                disabled={officialOperation !== null}
+              >
                 Concluir mesmo assim
               </button>
             </div>

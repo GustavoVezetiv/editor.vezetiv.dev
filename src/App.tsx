@@ -282,6 +282,19 @@ function App() {
     },
     [repository],
   );
+  const deleteDocument = useCallback(
+    async (attempt: ActivityAttempt, documentId: string) => {
+      if (!repository) return { attempt, remoteState: "blocked" as const };
+      const saved = await repository.deleteDocument(attempt, documentId);
+      setActiveAttempt(saved.attempt);
+      setAttempts((items) => [
+        ...items.filter((item) => item.id !== saved.attempt.id),
+        saved.attempt,
+      ]);
+      return saved;
+    },
+    [repository],
+  );
   const refreshTeacher = async (classId = selectedClassId) => {
     if (repository) await loadTeacher(repository, classId);
   };
@@ -438,6 +451,7 @@ function App() {
         initialAttempt={activeAttempt}
         onSaveAttempt={saveAttempt}
         onVerifyDocument={verifyDocument}
+        onDeleteDocument={deleteDocument}
         onCompleteAttempt={completeAttempt}
         onBack={() => navigate("home", "/student")}
       />

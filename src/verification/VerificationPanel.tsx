@@ -7,6 +7,7 @@ interface VerificationPanelProps {
   activity: Activity
   results: CheckResult[] | null
   resultSource: 'preview' | 'official' | null
+  verificationState: 'idle' | 'verifying' | 'verified' | 'verification-error'
   hasUnverifiedChanges: boolean
   onVerify: () => void
   onHintOpened: (requirementId: string) => void
@@ -14,7 +15,7 @@ interface VerificationPanelProps {
   readOnly?: boolean
 }
 
-export function VerificationPanel({ activity, results, resultSource, hasUnverifiedChanges, onVerify, onHintOpened, onHintChanged, readOnly = false }: VerificationPanelProps) {
+export function VerificationPanel({ activity, results, resultSource, verificationState, hasUnverifiedChanges, onVerify, onHintOpened, onHintChanged, readOnly = false }: VerificationPanelProps) {
   const [openHintId, setOpenHintId] = useState<string | null>(null)
   const completed = results?.filter((result) => result.passed).length ?? 0
   const score = results ? calculateScore(activity, results) : null
@@ -32,13 +33,22 @@ export function VerificationPanel({ activity, results, resultSource, hasUnverifi
         <h2 id="verification-title">Verificação</h2>
         <p>Leia, execute e verifique quando estiver pronto.</p>
       </div>
-      <button className="verify-button" type="button" onClick={onVerify} disabled={readOnly}>Verificar atividade</button>
+      <button className="verify-button" type="button" onClick={onVerify} disabled={readOnly || verificationState === 'verifying'}>
+        {verificationState === 'verifying' ? 'Confirmando…' : 'Verificar atividade'}
+      </button>
+      {verificationState === 'verification-error' && (
+        <p className="verification-pending" role="alert">
+          Não foi possível confirmar a verificação. Tente novamente. A prévia abaixo não é oficial.
+        </p>
+      )}
       {hasUnverifiedChanges && results && <p className="verification-pending" role="status">O documento foi alterado. Verifique novamente.</p>}
       {results && results.length > 0 && (
         <div className="check-results" aria-live="polite">
           <p className="verification-pending">
             {resultSource === 'preview'
-              ? 'Prévia local deste documento. O resultado oficial está sendo confirmado.'
+              ? verificationState === 'verification-error'
+                ? 'Prévia local não oficial deste documento.'
+                : 'Prévia local deste documento. O resultado oficial está sendo confirmado.'
               : 'Resultado oficial deste documento.'}
           </p>
           <p className="check-summary">{completed} de {results.length} requisitos concluídos</p>

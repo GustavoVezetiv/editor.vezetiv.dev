@@ -103,6 +103,8 @@ export interface ActivityDocument {
   name: string
   content: JSONContent
   preset: DocumentPreset
+  revision: number
+  deletedAt?: string
   updatedAt: string
 }
 
