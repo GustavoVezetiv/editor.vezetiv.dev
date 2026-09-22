@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { JSONContent } from '@tiptap/core'
 import { activity01 } from '../config/activity01'
-import { verifyActivity } from './verifyActivity'
+import { textSimilarity, verifyActivity } from './verifyActivity'
 
 function resultsFor(content: JSONContent): Record<string, boolean> {
   return Object.fromEntries(verifyActivity(content, activity01).map((result) => [result.id, result.passed]))
@@ -124,4 +124,69 @@ test('mantém o requisito de negrito quando outra ocorrência não está em negr
   }
 
   assert.equal(resultsFor(multipleOccurrences).bold, true)
+})
+
+test('aceita palavra em negrito dividida em vários nós inline', () => {
+  const splitBold: JSONContent = { type: 'doc', content: [{ type: 'paragraph', content: [
+    { type: 'text', text: 'susten', marks: [{ type: 'bold' }] },
+    { type: 'text', text: 'tabilidade', marks: [{ type: 'bold' }] },
+  ] }] }
+  assert.equal(resultsFor(splitBold).bold, true)
+})
+
+test('diferencia comparação exata de normalizada', () => {
+  const content: JSONContent = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: '  TEXTO   solicitado  ' }] }] }
+  const requirement = { id: 'text', type: 'text-content' as const, text: 'Texto solicitado', points: 10, label: 'Texto', objective: 'Digitar.' }
+  const exact = { ...activity01, requirements: [{ ...requirement, matchMode: 'exact' as const }] }
+  const normalized = { ...activity01, requirements: [{ ...requirement, matchMode: 'normalized' as const }] }
+  assert.equal(verifyActivity(content, exact)[0].passed, false)
+  assert.equal(verifyActivity(content, normalized)[0].passed, true)
+})
+
+test('calcula similaridade local e determinística para texto solicitado', () => {
+  assert.equal(textSimilarity('Texto de teste', 'Texto de teste'), 1)
+  assert.ok(textSimilarity('Este é um texto suficientemente longo para validar pequenas diferenças de pontuação.', 'Este é um texto suficientemente longo para validar pequenas diferenças de pontuação') > 0.95)
+})
+
+test('reconhece listas com marcadores e preset como requisitos estruturais', () => {
+  const activity = {
+    ...activity01,
+    requirements: [
+      { id: 'bullet', type: 'bullet-list' as const, minItems: 2, points: 50, label: 'Marcadores', objective: 'Criar marcadores.' },
+      { id: 'preset', type: 'document-preset' as const, preset: 'normal' as const, points: 50, label: 'Preset normal', objective: 'Usar Normal.' },
+    ],
+  }
+  const content: JSONContent = { type: 'doc', content: [{ type: 'bulletList', content: [listItem('Um'), listItem('Dois')] }] }
+  const result = Object.fromEntries(verifyActivity(content, activity, 'normal').map((check) => [check.id, check.passed]))
+  assert.deepEqual(result, { bullet: true, preset: true })
+})
+
+test('explica quando o título existe mas ainda não usa o estilo solicitado', () => {
+  const content: JSONContent = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Preservação Ambiental' }] }] }
+  const title = verifyActivity(content, activity01).find((result) => result.id === 'title')
+  assert.equal(title?.passed, false)
+  assert.match(title?.feedback ?? '', /Título 1/)
+})
+
+test('compara similaridade com o melhor parágrafo dentro de um documento maior', () => {
+  const activity = { ...activity01, requirements: [{ id: 'text', type: 'text-content' as const, text: 'O planejamento ajuda a organizar ideias antes de escrever.', matchMode: 'similarity' as const, similarityThreshold: 0.95, points: 100, label: 'Texto', objective: 'Digitar texto.' }] }
+  const content: JSONContent = { type: 'doc', content: [
+    { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Meu documento' }] },
+    { type: 'paragraph', content: [{ type: 'text', text: 'O planejamento ajuda a organizar ideias antes de escrever.' }] },
+    { type: 'orderedList', content: [listItem('Planejar'), listItem('Escrever'), listItem('Revisar')] },
+  ] }
+  assert.equal(verifyActivity(content, activity)[0].passed, true)
+})
+
+test('aceita qualquer heading, alinhamento e lista que satisfaça o requisito', () => {
+  const content: JSONContent = { type: 'doc', content: [
+    { type: 'heading', attrs: { level: 2, textAlign: 'left' }, content: [{ type: 'text', text: 'Preservação Ambiental' }] },
+    { type: 'heading', attrs: { level: 1, textAlign: 'center' }, content: [{ type: 'text', text: 'Preservação Ambiental' }] },
+    { type: 'orderedList', content: [listItem('Um'), listItem('Dois')] },
+    { type: 'orderedList', content: [listItem('Um'), listItem('Dois'), listItem('Três')] },
+  ] }
+  const result = resultsFor(content)
+  assert.equal(result.title, true)
+  assert.equal(result.alignment, true)
+  assert.equal(result.list, true)
 })

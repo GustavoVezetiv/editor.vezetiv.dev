@@ -1,0 +1,6 @@
+import { useState } from 'react'
+
+export function TeacherLoginPage({ onRequestLink, onBack, error }: { onRequestLink: (email: string) => Promise<void>; onBack: () => void; error?: string }) {
+  const [email, setEmail] = useState(''); const [sending, setSending] = useState(false); const [sent, setSent] = useState(false)
+  return <main className="entry-page"><section className="entry-card"><div className="brand"><span className="brand-mark">V</span>Editor Vezetiv</div><h1>Login do professor</h1><p>Receba um link de acesso no e-mail cadastrado. Não é criada uma senha própria.</p><form onSubmit={(event) => { event.preventDefault(); setSending(true); void onRequestLink(email).then(() => setSent(true)).finally(() => setSending(false)) }}><label>E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></label>{error ? <p className="form-error" role="alert">{error}</p> : null}{sent ? <p className="success-notice" role="status">Link enviado. Verifique sua caixa de entrada.</p> : null}<button className="primary-button" disabled={sending}>{sending ? 'Enviando…' : 'Enviar link de acesso'}</button></form><button className="link-button" onClick={onBack}>← Voltar para entrada do aluno</button></section></main>
+}

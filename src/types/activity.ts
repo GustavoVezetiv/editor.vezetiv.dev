@@ -1,8 +1,9 @@
 import type { JSONContent } from '@tiptap/core'
 
 export type PastePolicy = 'blocked' | 'allowed'
-export type VerificationMode = 'manual' | 'live'
+export type VerificationMode = 'manual'
 export type DocumentPreset = 'academic-abnt' | 'normal'
+export type ActivityStatus = 'draft' | 'published' | 'archived'
 
 export type EditorTool =
   | 'undo'
@@ -48,8 +49,10 @@ export interface TextMarkRequirement extends BaseRequirement {
 }
 
 export interface TextRequirement extends BaseRequirement {
-  type: 'text'
+  type: 'text-content'
   text: string
+  matchMode: 'exact' | 'normalized' | 'similarity'
+  similarityThreshold?: number
 }
 
 export interface OrderedListRequirement extends BaseRequirement {
@@ -57,7 +60,21 @@ export interface OrderedListRequirement extends BaseRequirement {
   minItems: number
 }
 
-export type ActivityRequirement = HeadingRequirement | AlignmentRequirement | TextMarkRequirement | TextRequirement | OrderedListRequirement
+export interface BulletListRequirement extends BaseRequirement {
+  type: 'bullet-list'
+  minItems: number
+}
+
+export interface DocumentPresetRequirement extends BaseRequirement {
+  type: 'document-preset'
+  preset: DocumentPreset
+}
+
+export interface SpellingRequirement extends BaseRequirement {
+  type: 'spelling'
+}
+
+export type ActivityRequirement = HeadingRequirement | AlignmentRequirement | TextMarkRequirement | TextRequirement | OrderedListRequirement | BulletListRequirement | DocumentPresetRequirement | SpellingRequirement
 
 export interface ActivityScoring {
   totalPoints: number
@@ -65,6 +82,7 @@ export interface ActivityScoring {
 
 export interface Activity {
   id: string
+  slug: string
   title: string
   description: string
   instructions: string[]
@@ -73,10 +91,11 @@ export interface Activity {
   enabledTools: EditorTool[]
   pastePolicy: PastePolicy
   verificationMode: VerificationMode
-  documentPreset: DocumentPreset
+  defaultDocumentPreset: DocumentPreset
   requirements: ActivityRequirement[]
   hints: ActivityHint[]
   scoring: ActivityScoring
+  status: ActivityStatus
 }
 
 export interface ActivityDocument {
@@ -84,6 +103,8 @@ export interface ActivityDocument {
   name: string
   content: JSONContent
   preset: DocumentPreset
+  revision: number
+  deletedAt?: string
   updatedAt: string
 }
 

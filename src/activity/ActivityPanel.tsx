@@ -5,12 +5,18 @@ import { VerificationPanel } from '../verification/VerificationPanel'
 interface ActivityPanelProps {
   activity: Activity
   results: CheckResult[] | null
+  resultSource: 'preview' | 'official' | null
+  verificationState: 'idle' | 'verifying' | 'verified' | 'verification-error'
   hasUnverifiedChanges: boolean
   onVerify: () => void
   onHintOpened: (requirementId: string) => void
+  onHintChanged?: (requirementId: string | null) => void
+  onComplete: () => void
+  isCompleted: boolean
+  officialOperationInProgress: boolean
 }
 
-export function ActivityPanel({ activity, results, hasUnverifiedChanges, onVerify, onHintOpened }: ActivityPanelProps) {
+export function ActivityPanel({ activity, results, resultSource, verificationState, hasUnverifiedChanges, onVerify, onHintOpened, onHintChanged, onComplete, isCompleted, officialOperationInProgress }: ActivityPanelProps) {
   return (
     <aside className="activity-panel" aria-labelledby="activity-title">
       <div className="activity-scroll">
@@ -25,10 +31,10 @@ export function ActivityPanel({ activity, results, hasUnverifiedChanges, onVerif
           </ol>
         </section>
 
-        <section className="source-text" aria-labelledby="source-text-title">
+        {activity.sourceText ? <section className="source-text" aria-labelledby="source-text-title">
           <h2 id="source-text-title">Texto para digitar</h2>
           <p>{activity.sourceText}</p>
-        </section>
+        </section> : null}
 
         <section className="learning-note" aria-label="Como usar a atividade">
           <strong>Como aprender</strong>
@@ -36,13 +42,19 @@ export function ActivityPanel({ activity, results, hasUnverifiedChanges, onVerif
         </section>
       </div>
       <VerificationPanel
-        mode={activity.verificationMode}
         results={results}
+        resultSource={resultSource}
+        verificationState={verificationState}
         hasUnverifiedChanges={hasUnverifiedChanges}
         onVerify={onVerify}
         activity={activity}
         onHintOpened={onHintOpened}
+        onHintChanged={onHintChanged}
+        readOnly={isCompleted}
       />
+      <button className="complete-button" type="button" onClick={onComplete} disabled={isCompleted || officialOperationInProgress}>
+        {isCompleted ? 'Atividade concluída' : 'Concluir atividade'}
+      </button>
     </aside>
   )
 }

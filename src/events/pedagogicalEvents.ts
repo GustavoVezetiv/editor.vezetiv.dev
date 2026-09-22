@@ -1,9 +1,13 @@
 export type PedagogicalEventType =
   | 'activity_started'
   | 'paste_blocked'
+  | 'document_created'
+  | 'document_renamed'
+  | 'document_deleted'
   | 'format_applied'
   | 'hint_opened'
   | 'verification_requested'
+  | 'verification_completed'
   | 'requirement_passed'
   | 'activity_completed'
   | 'preset_changed'
@@ -31,5 +35,7 @@ export function createPedagogicalEvent(
 
 // Deliberately isolated from localStorage: event persistence belongs to the future backend.
 export function logPedagogicalEvent(event: PedagogicalEvent): void {
-  console.info('[evento pedagógico]', event)
+  // Events are persisted with the attempt. Keeping this boundary avoids noisy browser logs
+  // and leaves room for an explicit observability adapter later.
+  void event
 }

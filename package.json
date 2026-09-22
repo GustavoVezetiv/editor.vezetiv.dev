@@ -8,9 +8,11 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "tsx --test src/**/*.test.ts",
+    "test:e2e": "playwright test",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
     "@tiptap/extension-text-align": "^3.20.2",
     "@tiptap/extension-text-style": "^3.20.2",
     "@tiptap/extension-underline": "^3.20.2",
@@ -24,6 +26,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^26.5.1",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
